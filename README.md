@@ -1,24 +1,35 @@
 # LineShadowPlanner
 
-A lightweight, Hydra-powered tool for computing tree shadow lengths and orientations over a day. Given a location, date, and tree height, it generates hourly solar positions, calculates shadow lengths and directions, and visualizes north–south vs. east–west shadow coverage.
+A lightweight, Hydra-powered toolkit to plan drone flights along seismic lines by minimizing tree shadows. Three flavors:
+
+1. **Simple Time Planner** (`simple_time_planner.py`)  
+   Computes NS/EW shadow percentages over a day for a single location & tree height.
+
+2. **Orientation-Only Planner** (`orientation_planner.py`)  
+   Reads a GeoPackage of line geometries, computes each line’s bearing, and finds best flight windows based on that orientation.
+
+3. **Height & Orientation Planner** (`height_orientation_planner.py`)  
+   Like the Orientation-Only Planner, but also samples a canopy-height model (CHM) around each segment to estimate tree height per segment.
 
 ---
 
 ## 🚀 Features
 
-- **Solar position**  
-  Computes apparent solar altitude and azimuth using pvlib.  
-- **Shadow metrics**  
-  Calculates shadow length (m) and direction (°) for each hour.  
-- **NS/EW split**  
-  Decomposes each shadow into north–south and east–west percentages.  
-- **Hydra config**  
-  All parameters (location, date, tree height, timezone, etc.) are YAML-configurable.  
-- **Built-in plotting**  
-  Generates an NS/EW shadow coverage chart for quick visualization.
+- **Simple Time Planner**  
+  - 15-minute resolution solar positions & shadow lengths  
+  - NS vs. EW shadow percentages and plotting  
+  
+- **Orientation-Only Planner**  
+  - Bearing from North → compass category (e.g. NE, WSW)  
+  - Flight windows per line geometry  
+  
+- **Height & Orientation Planner**  
+  - Segment each line into fixed lengths  
+  - Sample CHM to derive 75th percentile canopy height per segment  
+  - Buffer-based shadow penetration per segment orientation  
+  - Flight windows and total durations per segment  
 
 ---
-
 ## 📦 Installation
 
 ### Using conda  
@@ -84,17 +95,15 @@ LineShadowPlanner/
 
 ## 📊 Examples
 
-**Default NS/EW shadow coverage**  
-![NS vs EW shadow coverage](examples/flight-planner.png)
-
-**Orientation-based flight windows**  
-![Orientation planner](examples/flight-planner orientation.png)
 
 **Light conditions for EW lines**  
 ![EW light shading](examples/EW_light.png)
 
 **Light conditions for NS lines**  
 ![NS light shading](examples/NS_light.png)
+
+**Orientation-based flight windows**  
+![Orientation planner](examples/flight-planner orientation.png)
 
 **Date-specific planner snapshots**  
 ![11 Aug snapshot](examples/flight-planner_11aug.png)  
