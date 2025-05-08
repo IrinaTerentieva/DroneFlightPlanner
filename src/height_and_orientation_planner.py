@@ -1,3 +1,4 @@
+### /home/irina/LineShadowPlanner/src/height_and_orientation_planner.py
 import rasterio.mask
 import geopandas as gpd
 import pandas as pd

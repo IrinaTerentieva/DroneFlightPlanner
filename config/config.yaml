@@ -1,1 +1,56 @@
 # config/config.yaml
+default:
+  - _self_
+
+hydra:
+  run:
+    dir: .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1) Common: Time & Location
+# ─────────────────────────────────────────────────────────────────────────────
+location:
+  latitude:     54.938643706057285   # degrees
+  longitude:   -110.35322727751391   # degrees
+  elevation:      800                # meters above sea level
+  timezone:     "America/Edmonton"
+  date:        "2024-08-09"          # YYYY-MM-DD
+  freq:         "15T"                # e.g. "15T" = 15-minute intervals
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2) Simple - Basic Time Planner
+#    (src/shadow_calculator.py)
+# ─────────────────────────────────────────────────────────────────────────────
+simple_time_planner:
+  tree_height:              10             # meters (used when no CHM available)
+  buffer_width_m:           10   # meters
+  flight_window:
+    max_ns_shadow_pct:       50   # upper limit for NS shadow %
+    max_ew_shadow_pct:       50   # upper limit for EW shadow %
+    preferred_ns_shadow_pct: 30   # highlight especially good NS periods
+    preferred_ew_shadow_pct: 30   # highlight especially good EW periods
+  plot:
+    enabled:      true
+    figure_size: [12, 6]
+    title:       "Shadow Coverage on ${location.date}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3) Orientation-Only Planner
+#    (src/orientation_planner.py)
+# ─────────────────────────────────────────────────────────────────────────────
+orientation_planner:
+  vector_path:  "/media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg"
+  output_field: "flight_windows"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4) CHM + Orientation Planner
+#    (src/height_and_orientation_planner.py)
+# ─────────────────────────────────────────────────────────────────────────────
+height_and_orientation_planner:
+  segmentation:
+    segment_length:        100
+    vector_path:  "/media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg"
+    output_field: "flight_windows"
+  chm:
+    path:  "/media/irina/My Book1/LiDea_Pilot/LiDea1_nCHM10cm_2023.tif"
+    segment_buffer_radius: 25

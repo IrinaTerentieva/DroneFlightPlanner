@@ -1,4 +1,5 @@
 # src/shadow_calculator.py
+
 import math
 import pandas as pd
 import pvlib
@@ -7,52 +8,71 @@ import matplotlib.dates as mdates
 import hydra
 from omegaconf import DictConfig
 from matplotlib.ticker import FuncFormatter
-from src.utils import calculate_shadow, calc_buffer_percentage, find_flight_windows, shade_contiguous, format_time
+from src.utils import (
+    calculate_shadow,
+    calc_buffer_percentage,
+    find_flight_windows,
+    shade_contiguous,
+    format_time
+)
 
-@hydra.main(version_base=None, config_path="../config", config_name="shadow_calculator")
+@hydra.main(version_base=None, config_path="../config", config_name="config")
 def main(cfg: DictConfig):
-    # 1) Generate timestamps every 15 minutes
+    # shorthand for nested blocks
+    loc  = cfg.location
+    print('Location config: ', loc)
+    stp  = cfg.simple_time_planner
+    print('Simple time planner config: ', stp)
+
+    # 1) Generate timestamps every cfg.location.freq
     times = pd.date_range(
-        f"{cfg.date} 00:00", f"{cfg.date} 23:59", freq=cfg.freq, tz=cfg.timezone
+        f"{loc.date} 00:00",
+        f"{loc.date} 23:59",
+        freq=loc.freq,
+        tz=loc.timezone
     )
 
     # 2) Compute solar positions
     solpos = pvlib.solarposition.get_solarposition(
-        times, cfg.latitude, cfg.longitude, altitude=cfg.elevation
-    ).tz_convert(cfg.timezone)
+        times, loc.latitude, loc.longitude, altitude=loc.elevation
+    ).tz_convert(loc.timezone)
 
-    # 3) Compute buffer coverage
+    # 3) Compute buffer coverage (NS vs EW)
     records = []
-    for t, row in solpos.iterrows():
+    for _, row in solpos.iterrows():
         length, direction = calculate_shadow(
-            cfg.tree_height, row['apparent_elevation'], row['azimuth']
+            stp.tree_height,
+            row["apparent_elevation"],
+            row["azimuth"]
         )
-        ns_buf = calc_buffer_percentage(length, direction, cfg.buffer_width_m, axis='NS')
-        ew_buf = calc_buffer_percentage(length, direction, cfg.buffer_width_m, axis='EW')
+        # NS = line_ori=0°, EW = 90°
+        ns_pct = calc_buffer_percentage(length, direction, stp.buffer_width_m, 0)
+        ew_pct = calc_buffer_percentage(length, direction, stp.buffer_width_m, 90)
         records.append({
-            'Elevation': row['apparent_elevation'],
-            'NS Buffer (%)': ns_buf,
-            'EW Buffer (%)': ew_buf
+            "Elevation": row["apparent_elevation"],
+            "NS Shadow (%)": ns_pct,
+            "EW Shadow (%)": ew_pct
         })
-    df = pd.DataFrame(records, index=times.tz_convert(cfg.timezone).tz_localize(None))
 
-    # 4) Print HH:MM and metrics
+    df = pd.DataFrame(records, index=times.tz_convert(loc.timezone).tz_localize(None))
+
+    # 4) Print metrics
     df_print = df.copy()
-    df_print['Time'] = df_print.index.strftime('%H:%M')
-    print(df_print[['Time', 'Elevation', 'NS Buffer (%)', 'EW Buffer (%)']].to_string(index=False))
+    df_print["Time"] = df_print.index.strftime("%H:%M")
+    print(df_print[["Time", "Elevation", "NS Shadow (%)", "EW Shadow (%)"]].to_string(index=False))
 
-    # 5) Peak sun time
-    peak_time = df['Elevation'].idxmax()
-    print(f"\nPeak sun at: {peak_time.strftime('%H:%M')} "
-          f"(Elevation: {df.at[peak_time, 'Elevation']:.1f}°)")
+    # 5) Peak sun
+    peak = df["Elevation"].idxmax()
+    print(f"\nPeak sun at: {peak.strftime('%H:%M')} (Elevation: {df.at[peak,'Elevation']:.1f}°)")
 
     # 6) Flight windows
-    ns_windows = find_flight_windows(
-        df, 'NS Buffer (%)', cfg.flight_window.max_ns_shadow_pct
-    )
-    ew_windows = find_flight_windows(
-        df, 'EW Buffer (%)', cfg.flight_window.max_ew_shadow_pct
-    )
+    ns_windows = find_flight_windows(df.index, df["NS Shadow (%)"], df["Elevation"],
+                                     stp.flight_window.max_ns_shadow_pct,
+                                     df.index[0], df.index[-1])
+    ew_windows = find_flight_windows(df.index, df["EW Shadow (%)"], df["Elevation"],
+                                     stp.flight_window.max_ew_shadow_pct,
+                                     df.index[0], df.index[-1])
+
     print("\nRecommended NS flight windows:")
     for s, e in ns_windows:
         print(f" - {s.strftime('%H:%M')} to {e.strftime('%H:%M')}")
@@ -60,59 +80,45 @@ def main(cfg: DictConfig):
     for s, e in ew_windows:
         print(f" - {s.strftime('%H:%M')} to {e.strftime('%H:%M')}")
 
-    # 7) Plot settings
+    # 7) Plot
+    fmt = FuncFormatter(format_time)
     major_locator = mdates.HourLocator(interval=1)
-    major_formatter = FuncFormatter(format_time)
     title_font, label_font, tick_font, leg_font = 18, 14, 12, 12
 
-            # NS Buffer plot
-    fig, ax = plt.subplots(figsize=tuple(cfg.plot.figure_size))
-    day_mask = df['Elevation'] >= 0
-    # plot daytime buffer percent
-    ax.plot(df.index[day_mask], df['NS Buffer (%)'][day_mask], color='teal', linewidth=2.5, label='NS Buffer (%)')
-
-    # night shading
-    shade_contiguous(ax, df.index, df['Elevation'] < 0, color='blue', alpha=0.2)
-
-    # highlight flight windows (continuous spans)
-    print('NS windows: ', ns_windows)
-    for start, end in ns_windows:
-        ax.axvspan(start, end, color='yellow', alpha=0.3)
-    ax.axvline(peak_time, color='red', linestyle='--', linewidth=2, label='Peak Sun')
-    ax.set_title(f"NS Shadow (%) on {cfg.date}", fontsize=title_font)
-    ax.set_xlabel('Time', fontsize=label_font)
-    ax.set_ylabel('NS Buffer (%)', fontsize=label_font)
-    ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
-    ax.xaxis.set_major_formatter(FuncFormatter(format_time))
-    # ax.xaxis.set_minor_locator(mdates.MinuteLocator(byminute=[0,15,30,45]))
-    ax.tick_params(axis='both', labelsize=tick_font)
-    ax.grid(which='major', axis='x', linestyle='--', color='gray')
-    ax.grid(which='minor', axis='x', linestyle=':', color='lightgray')
-    ax.legend(loc='upper right', fontsize=leg_font)
+    # NS plot
+    fig, ax = plt.subplots(figsize=tuple(stp.plot.figure_size))
+    day = df["Elevation"] >= 0
+    ax.plot(df.index[day], df["NS Shadow (%)"][day], color="teal", linewidth=2.5, label="NS")
+    shade_contiguous(ax, df.index, df["Elevation"] < 0, color="blue", alpha=0.2)
+    for s, e in ns_windows:
+        ax.axvspan(s, e, color="gold", alpha=0.3)
+    ax.axvline(peak, color="red", linestyle="--", linewidth=2, label="Peak Sun")
+    ax.set_title(stp.plot.title, fontsize=title_font)
+    ax.set_xlabel("Time", fontsize=label_font)
+    ax.set_ylabel("NS Shadow (%)", fontsize=label_font)
+    ax.xaxis.set_major_locator(major_locator)
+    ax.xaxis.set_major_formatter(fmt)
+    ax.tick_params(labelsize=tick_font)
+    ax.grid(True, linestyle="--", color="gray")
+    ax.legend(fontsize=leg_font)
     plt.tight_layout()
     plt.show()
 
-    # EW Buffer plot
-    fig, ax = plt.subplots(figsize=tuple(cfg.plot.figure_size))
-    ew_mask = (df['EW Buffer (%)'] <= cfg.flight_window.preferred_ew_shadow_pct) & day_mask
-    ax.plot(df.index[day_mask], df['EW Buffer (%)'][day_mask], color='purple', linewidth=2.5, label='EW Buffer (%)')
-    shade_contiguous(ax, df.index, df['Elevation'] < 0, color='blue', alpha=0.2)
-
-    print('EW windows: ', ew_windows)
-    for start, end in ew_windows:
-        ax.axvspan(start, end, color='yellow', alpha=0.3)
-
-    ax.axvline(peak_time, color='red', linestyle='--', linewidth=2, label='Peak Sun')
-    ax.set_title(f"EW Shadow (%) on {cfg.date}", fontsize=title_font)
-    ax.set_xlabel('Time', fontsize=label_font)
-    ax.set_ylabel('EW Buffer (%)', fontsize=label_font)
-    ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
-    ax.xaxis.set_major_formatter(FuncFormatter(format_time))
-    # ax.xaxis.set_minor_locator(mdates.MinuteLocator(byminute=[0,15,30,45]))
-    ax.tick_params(axis='both', labelsize=tick_font)
-    ax.grid(which='major', axis='x', linestyle='--', color='gray')
-    ax.grid(which='minor', axis='x', linestyle=':', color='lightgray')
-    ax.legend(loc='upper right', fontsize=leg_font)
+    # EW plot
+    fig, ax = plt.subplots(figsize=tuple(stp.plot.figure_size))
+    ax.plot(df.index[day], df["EW Shadow (%)"][day], color="purple", linewidth=2.5, label="EW")
+    shade_contiguous(ax, df.index, df["Elevation"] < 0, color="blue", alpha=0.2)
+    for s, e in ew_windows:
+        ax.axvspan(s, e, color="gold", alpha=0.3)
+    ax.axvline(peak, color="red", linestyle="--", linewidth=2, label="Peak Sun")
+    ax.set_title(stp.plot.title, fontsize=title_font)
+    ax.set_xlabel("Time", fontsize=label_font)
+    ax.set_ylabel("EW Shadow (%)", fontsize=label_font)
+    ax.xaxis.set_major_locator(major_locator)
+    ax.xaxis.set_major_formatter(fmt)
+    ax.tick_params(labelsize=tick_font)
+    ax.grid(True, linestyle="--", color="gray")
+    ax.legend(fontsize=leg_font)
     plt.tight_layout()
     plt.show()
 

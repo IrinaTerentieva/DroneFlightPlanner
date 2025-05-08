@@ -1,80 +1,88 @@
-# src/line_flight_planner.py
+# src/orientation_planner.py
 
-import math
-import random
 import geopandas as gpd
 import pandas as pd
 import pvlib
 import hydra
 from omegaconf import DictConfig
-from shapely.geometry import LineString
 
-from src.orientation_utils import (
+from src.utils import (
     compute_orientation,
     orientation_category,
     calculate_shadow,
     calc_buffer_percentage,
     find_flight_windows,
-    format_windows
+    format_windows,
 )
 
-@hydra.main(version_base="1.1", config_path="../config", config_name="orientation_planner")
+@hydra.main(version_base="1.1", config_path="../config", config_name="config")
 def main(cfg: DictConfig):
-    # 1) Read lines
-    gdf = gpd.read_file(cfg.vector_path)
+    # 0) short-hands
+    loc = cfg.location
+    stp = cfg.simple_time_planner
+    op  = cfg.orientation_planner
 
-    # 2) Orientation & compass category
-    gdf['orientation']    = gdf.geometry.apply(compute_orientation)
-    gdf['dir_category']   = gdf['orientation'].apply(orientation_category)
+    # 1) Read input
+    gdf = gpd.read_file(op.vector_path)
 
-    # 3) Build time index, convert freq alias
-    freq = cfg.freq.replace('T','min')
-    times = pd.date_range(f"{cfg.date} 00:00", f"{cfg.date} 23:59",
-                          freq=freq, tz=cfg.timezone)
+    # 2) Add orientation columns
+    gdf["orientation"]    = gdf.geometry.apply(compute_orientation)
+    gdf["dir_category"]   = gdf["orientation"].apply(orientation_category)
 
-    # 4) Solar positions
+    # 3) Build time index
+    freq  = loc.freq.replace("T", "min")
+    times = pd.date_range(
+        f"{loc.date} 00:00", f"{loc.date} 23:59",
+        freq=freq, tz=loc.timezone
+    )
+
+    # 4) Solar angles
     solpos = pvlib.solarposition.get_solarposition(
-        times, cfg.latitude, cfg.longitude, altitude=cfg.elevation
-    ).tz_convert(cfg.timezone)
-    elev = solpos['apparent_elevation']
+        times, loc.latitude, loc.longitude, altitude=loc.elevation
+    ).tz_convert(loc.timezone)
+    elev = solpos["apparent_elevation"]
 
-    # sunrise/sunset bounds
-    daylight = elev > 0
-    day_times = times[daylight]
-    if not day_times.empty:
+    # 5) Daylight window
+    day_mask  = elev > 0
+    day_times = times[day_mask]
+    if len(day_times):
         day_start, day_end = day_times[0], day_times[-1]
     else:
         day_start, day_end = times[0], times[-1]
 
-    # 5) Per-line windows
+    # 6) Compute flight windows for each line
     windows_list = []
     for _, row in gdf.iterrows():
-        ori = row['orientation']
-        axis = 'NS'  # now we allow any orientation
-        tree_h = cfg.tree_height
+        ori    = row["orientation"]
+        tree_h = stp.tree_height
 
-        # compute buffer% series for this orientation
-        buf = []
-        for alt, az in zip(solpos['apparent_elevation'], solpos['azimuth']):
+        # build percent-shadow‐in-buffer series
+        pct = []
+        for alt, az in zip(solpos["apparent_elevation"], solpos["azimuth"]):
             length, direction = calculate_shadow(tree_h, alt, az)
-            buf.append(calc_buffer_percentage(length, direction,
-                                              cfg.buffer_width_m, ori))
-        series = pd.Series(buf, index=times)
+            pct.append(calc_buffer_percentage(
+                length,
+                direction,
+                stp.buffer_width_m,
+                ori
+            ))
+        series = pd.Series(pct, index=times)
 
-        # find windows within daylight
-        threshold = cfg.flight_window.max_buffer_pct
-        wins = find_flight_windows(times, series, elev,
-                                   threshold, day_start, day_end)
+        # find contiguous daylight windows under threshold
+        thresh = stp.flight_window.max_ns_shadow_pct
+        wins   = find_flight_windows(
+            times, series, elev,
+            thresh, day_start, day_end
+        )
         windows_list.append(format_windows(wins))
 
-    # 6) Save results
-    gdf[cfg.output_field] = windows_list
-    print(gdf[['orientation', 'dir_category', 'flight_windows']].head(30))
-    out = cfg.vector_path.replace('.gpkg','_with_windows.gpkg')
-    gdf.to_file(out, driver='GPKG')
-    print(f"Saved to {out}")
+    # 7) Save back to GPKG
+    gdf[op.output_field] = windows_list
+    print(gdf[["orientation", "dir_category", op.output_field]].head(10))
+
+    out_path = op.vector_path.replace(".gpkg", "_with_windows.gpkg")
+    gdf.to_file(out_path, driver="GPKG")
+    print(f"Saved to {out_path}")
 
 if __name__ == "__main__":
     main()
-
-

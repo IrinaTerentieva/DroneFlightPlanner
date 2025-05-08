@@ -1,6 +1,6 @@
 hydra:
   run:
-    dir: .
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
     dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ${hydra.job.num}
@@ -113,12 +113,12 @@ hydra:
     - hydra.mode=RUN
     task: []
   job:
-    name: line_orientation_planner
+    name: height_and_orientation_planner
     chdir: null
     override_dirname: ''
     id: ???
     num: ???
-    config_name: config
+    config_name: height_and_orientation_planner
     env_set: {}
     env_copy: []
     config:
@@ -140,7 +140,7 @@ hydra:
     - path: ''
       schema: structured
       provider: schema
-    output_dir: /home/irina/LineShadowPlanner/src
+    output_dir: /home/irina/LineShadowPlanner/src/outputs/2025-05-08/14-44-36
     choices:
       hydra/env: default
       hydra/callbacks: null

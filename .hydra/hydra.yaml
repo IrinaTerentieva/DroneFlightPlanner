@@ -118,7 +118,7 @@ hydra:
     override_dirname: ''
     id: ???
     num: ???
-    config_name: orientation_planner
+    config_name: config
     env_set: {}
     env_copy: []
     config:
