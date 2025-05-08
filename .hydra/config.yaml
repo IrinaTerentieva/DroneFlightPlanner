@@ -22,3 +22,5 @@ vector_path: /media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg
 chm_path: /media/irina/My Book1/LiDea_Pilot/LiDea1_nCHM10cm_2023.tif
 output_field: flight_windows
 use_line_coords: true
+segment_length: 100
+segment_buffer_radius: 25
