@@ -80,7 +80,7 @@ def main(cfg: DictConfig):
         series = pd.Series(pct, index=times)
 
         # 4c) Find flight windows under threshold
-        thresh = stp.flight_window.preferred_shadow_pct
+        thresh = stp.flight_window.max_shadow_pct
         wins = find_windows(times, series, elev, thresh, day_start, day_end)
         win_str = format_windows(wins)
         all_windows.append(win_str)

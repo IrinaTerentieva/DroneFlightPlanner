@@ -10,7 +10,7 @@ from src.utils import (
     compute_orientation,
     orientation_category,
     calculate_shadow,
-    calc_buffer_percentage,
+    calc_buffer_pct,
     find_flight_windows,
     format_windows,
 )
@@ -60,7 +60,7 @@ def main(cfg: DictConfig):
         pct = []
         for alt, az in zip(solpos["apparent_elevation"], solpos["azimuth"]):
             length, direction = calculate_shadow(tree_h, alt, az)
-            pct.append(calc_buffer_percentage(
+            pct.append(calc_buffer_pct(
                 length,
                 direction,
                 stp.buffer_width_m,
@@ -78,7 +78,7 @@ def main(cfg: DictConfig):
 
     # 7) Save back to GPKG
     gdf[op.output_field] = windows_list
-    print(gdf[["orientation", "dir_category", op.output_field]].head(10))
+    print(gdf[["orientation", "dir_category", op.output_field]].head(5))
 
     # generate date‐suffix from location.date
     import pandas as _pd

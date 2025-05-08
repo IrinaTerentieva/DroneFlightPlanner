@@ -17,6 +17,16 @@ def calculate_shadow(tree_height: float, solar_altitude: float, solar_azimuth: f
 def format_windows(wins):
     return ";".join(f"{s.strftime('%H:%M')}-{e.strftime('%H:%M')}" for s,e in wins)
 
+def calc_buffer_pct(shadow_len: float,
+                    shadow_dir: float,
+                    buf_w: float,
+                    line_ori: float):
+    """Project the shadow onto the buffer that’s perpendicular to the flight line."""
+    perp = (line_ori + 90) % 360
+    delta = math.radians(shadow_dir - perp)
+    comp = abs(math.cos(delta)) * shadow_len
+    return (min(comp, buf_w) / buf_w) * 100
+
 def calc_buffer_percentage(shadow_length: float, shadow_direction: float, buffer_width: float, axis: str):
     """Compute penetration of shadow into a perpendicular buffer."""
     if shadow_length <= 0:

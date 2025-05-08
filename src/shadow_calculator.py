@@ -46,8 +46,8 @@ def main(cfg: DictConfig):
             row["azimuth"]
         )
         # NS = line_ori=0°, EW = 90°
-        ns_pct = calc_buffer_percentage(length, direction, stp.buffer_width_m, 0)
-        ew_pct = calc_buffer_percentage(length, direction, stp.buffer_width_m, 90)
+        ns_pct = calc_buffer_percentage(length, direction, stp.buffer_width_m, 'NS')
+        ew_pct = calc_buffer_percentage(length, direction, stp.buffer_width_m, 'EW')
         records.append({
             "Elevation": row["apparent_elevation"],
             "NS Shadow (%)": ns_pct,

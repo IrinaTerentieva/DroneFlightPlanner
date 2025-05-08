@@ -16,7 +16,7 @@ location:
   longitude:   -110.35322727751391   # degrees
   elevation:      800                # meters above sea level
   timezone:     "America/Edmonton"
-  date:        "2024-08-09"          # YYYY-MM-DD
+  date:        "2024-08-11"          # YYYY-MM-DD
   freq:         "15T"                # e.g. "15T" = 15-minute intervals
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -27,8 +27,7 @@ simple_time_planner:
   tree_height:              10             # meters (used when no CHM available)
   buffer_width_m:           10   # meters
   flight_window:
-    max_shadow_pct:       50   # upper limit for NS shadow %
-    preferred_shadow_pct: 30   # highlight especially good NS periods
+    max_shadow_pct: 30
   plot:
     enabled:      true
     figure_size: [12, 6]
