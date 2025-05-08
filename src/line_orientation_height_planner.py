@@ -117,8 +117,6 @@ def categorize_window(win_str):
         return "fly short morning+evening"
     return "fly short noon"
 
-
-
 # --- main ---
 
 @hydra.main(version_base="1.1", config_path="../config", config_name="config")
