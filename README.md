@@ -34,8 +34,10 @@ A lightweight, Hydra-powered toolkit to plan drone flights along seismic lines b
 
 ### Using conda  
 ```bash
-conda create -n line-shadow -c conda-forge python=3.9 pvlib hydra-core matplotlib pandas numpy
-conda activate line-shadow
+### Using conda  
+conda create -n line-shadow-planner -c conda-forge python=3.9 pvlib hydra-core matplotlib pandas numpy
+conda activate line-shadow-planner
+
 ```
 
 ### Or with pip  
@@ -50,22 +52,29 @@ pip install pvlib hydra-core matplotlib pandas numpy
 In `config/config.yaml` you can set defaults for:
 
 ```yaml
-hydra:
-  run:
-    dir: .        # write outputs in working directory
+location:
+  latitude:     54.938643706057285   # degrees
+  longitude:   -110.35322727751391   # degrees
+  elevation:      800                # meters above sea level
+  timezone:     "America/Edmonton"
+  date:        "2024-06-21"          # YYYY-MM-DD
+  freq:         "15T"                # e.g. "15T" = 15-minute intervals
 
-latitude:   54.938643706057285   # decimal degrees
-longitude: -110.35322727751391
-elevation:   800                # meters above sea level
-tree_height:  10                # tree height in meters
-date:       "2024-08-09"        # YYYY-MM-DD
-timezone:  "America/Edmonton"
+orientation_planner:
+  vector_path:  "/media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg"
+  output_field: "flight_windows"
+  
+height_and_orientation_planner:
+  segmentation:
+    segment_length:        100
+    vector_path:  "/media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg"
+    output_field: "flight_windows"
+  chm:
+    path:  "/media/irina/My Book1/LiDea_Pilot/LiDea1_nCHM10cm_2023.tif"
+    segment_buffer_radius: 25
+
 ```
 
-Override any parameter on the fly:
-```bash
-python src/shadow_calculator.py date=2025-04-29 tree_height=15 latitude=53.5
-```
 
 ---
 
