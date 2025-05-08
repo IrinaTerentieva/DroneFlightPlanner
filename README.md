@@ -128,7 +128,7 @@ These two panels show the fraction of the 10 m buffer occupied by tree shadows
 - The vertical dashed line denotes the moment of peak solar elevation.
 
 **Orientation-based flight windows**  
-![Orientation planner](examples/flight-planner orientation.png)
+![Orientation planner](examples/flight-planner_orientation.png)
 
 Each colored trace represents one forest‐edge line, plotted according to its compass bearing.
 
@@ -140,9 +140,10 @@ Each colored trace represents one forest‐edge line, plotted according to its c
 Pilots can scan the legend to match a line’s orientation (e.g. NE, SW) and immediately see its optimal acquisition windows
 
 **Date-specific planner snapshots**  
-| Flight Planner: 21 June | Flight Planner: 11 Aug |
-|:-----------------------------:|:-----------------------------:|
-| ![EW light shading](examples/flight-planner_21june.png) | ![NS light shading](examples/flight-planner_11aug.png) |
+
+![EW light shading](examples/flight-planner_21june.png)
+![NS light shading](examples/flight-planner_11aug.png)
+
 These illustrate the full “height + orientation” planner on two dates: midsummer (21 Jun) versus later summer (11 Aug). Based on canopy heights from the CHM and each segment’s bearing, the planner assigns each segment to one of several pilot‑friendly categories:
 
 - Fly any time: More than 8 hr of low‑shadow coverage—virtually unrestricted scheduling.
