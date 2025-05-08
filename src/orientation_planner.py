@@ -15,7 +15,7 @@ from src.utils import (
     format_windows,
 )
 
-@hydra.main(version_base="1.1", config_path="../config", config_name="config", disable_log=True)
+@hydra.main(version_base="1.1", config_path="../config", config_name="config")
 def main(cfg: DictConfig):
     # 0) short-hands
     loc = cfg.location
@@ -80,7 +80,12 @@ def main(cfg: DictConfig):
     gdf[op.output_field] = windows_list
     print(gdf[["orientation", "dir_category", op.output_field]].head(10))
 
-    out_path = op.vector_path.replace(".gpkg", "_with_windows.gpkg")
+    # generate date‐suffix from location.date
+    import pandas as _pd
+    suffix = _pd.to_datetime(loc.date).strftime("%d%b").lower()
+    base   = op.vector_path.replace(".gpkg", "")
+    out_path = f"{base}_{suffix}_orientation_flightplanner.gpkg"
+
     gdf.to_file(out_path, driver="GPKG")
     print(f"Saved to {out_path}")
 

@@ -104,9 +104,18 @@ def main(cfg: DictConfig):
     uniq = sorted(set(all_windows))
 
     out_gdf = gpd.GeoDataFrame(rows, crs=gdf.crs)
-    out_path = hop.segmentation.vector_path.replace(".gpkg", "_segments_with_windows.gpkg")
+
+    # build a human‐readable date suffix, e.g. "06jun" or "20240606"
+    import pandas as _pd
+    suffix = _pd.to_datetime(loc.date).strftime("%d%b").lower()  # -> "09aug"
+    # or: suffix = _pd.to_datetime(loc.date).strftime("%Y%m%d")  # -> "20240809"
+
+    base = hop.segmentation.vector_path.replace(".gpkg", "")
+    out_path = f"{base}_{suffix}_CHM_flightplanner.gpkg"
+
     out_gdf.to_file(out_path, driver="GPKG")
     print(f"Saved to {out_path}")
+
 
 if __name__ == "__main__":
     main()

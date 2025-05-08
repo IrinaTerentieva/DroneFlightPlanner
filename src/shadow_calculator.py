@@ -16,7 +16,7 @@ from src.utils import (
     format_time
 )
 
-@hydra.main(version_base=None, config_path="../config", config_name="config", disable_log=True)
+@hydra.main(version_base=None, config_path="../config", config_name="config")
 def main(cfg: DictConfig):
     # shorthand for nested blocks
     loc  = cfg.location
