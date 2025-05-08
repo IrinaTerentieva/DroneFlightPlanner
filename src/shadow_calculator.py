@@ -10,25 +10,28 @@ from matplotlib.ticker import FuncFormatter
 
 
 def calculate_shadow(tree_height: float, solar_altitude: float, solar_azimuth: float):
+    """Return absolute shadow length and direction."""
     if solar_altitude <= 0:
         return 0.0, 0.0
     alt_rad = math.radians(solar_altitude)
     length = tree_height / math.tan(alt_rad)
-    print(f'Tree height is {tree_height} and length of shadow is {length}')
+    print(f"Tree height is {tree_height} and length of shadow is {length}")
     direction = (solar_azimuth + 180) % 360
     return length, direction
 
 
-def calc_ns_ew_pct(length: float, direction: float):
-    if length <= 0:
-        return 0.0, 0.0
-    rad = math.radians(direction)
-    ns = length * abs(math.sin(rad))
-    ew = length * abs(math.cos(rad))
-    return round((ns / length) * 100, 1), round((ew / length) * 100, 1)
+def calc_buffer_percentage(shadow_length: float, shadow_direction: float, buffer_width: float, axis: str):
+    """Compute penetration of shadow into a perpendicular buffer."""
+    if shadow_length <= 0:
+        return 0.0
+    dir_rad = math.radians(shadow_direction)
+    comp = (abs(math.sin(dir_rad)) if axis == 'NS' else abs(math.cos(dir_rad))) * shadow_length
+    penetration = min(comp, buffer_width)
+    return round((penetration / buffer_width) * 100, 1)
 
 
 def find_flight_windows(df: pd.DataFrame, column: str, threshold: float):
+    """Identify contiguous periods where df[column] <= threshold and sun is up."""
     mask = (df[column] <= threshold) & (df['Elevation'] > 0)
     periods = []
     start = None
@@ -45,6 +48,7 @@ def find_flight_windows(df: pd.DataFrame, column: str, threshold: float):
 
 
 def shade_contiguous(ax, times, mask, color, alpha):
+    """Shade contiguous spans where mask is True."""
     start = None
     prev_t = None
     for t, flag in zip(times, mask):
@@ -66,7 +70,7 @@ def format_time(x, pos=None):
 def main(cfg: DictConfig):
     # 1) Generate timestamps every 15 minutes
     times = pd.date_range(
-        f"{cfg.date} 00:00", f"{cfg.date} 23:59", freq='15T', tz=cfg.timezone
+        f"{cfg.date} 00:00", f"{cfg.date} 23:59", freq=cfg.freq, tz=cfg.timezone
     )
 
     # 2) Compute solar positions
@@ -74,34 +78,38 @@ def main(cfg: DictConfig):
         times, cfg.latitude, cfg.longitude, altitude=cfg.elevation
     ).tz_convert(cfg.timezone)
 
-    # 3) Compute shadow metrics
-    lengths, dirs = zip(*solpos.apply(
-        lambda r: calculate_shadow(cfg.tree_height, r['apparent_elevation'], r['azimuth']), axis=1
-    ))
-    ns_pct, ew_pct = zip(*[calc_ns_ew_pct(l, d) for l, d in zip(lengths, dirs)])
+    # 3) Compute buffer coverage
+    records = []
+    for t, row in solpos.iterrows():
+        length, direction = calculate_shadow(
+            cfg.tree_height, row['apparent_elevation'], row['azimuth']
+        )
+        ns_buf = calc_buffer_percentage(length, direction, cfg.buffer_width_m, axis='NS')
+        ew_buf = calc_buffer_percentage(length, direction, cfg.buffer_width_m, axis='EW')
+        records.append({
+            'Elevation': row['apparent_elevation'],
+            'NS Buffer (%)': ns_buf,
+            'EW Buffer (%)': ew_buf
+        })
+    df = pd.DataFrame(records, index=times.tz_convert(cfg.timezone).tz_localize(None))
 
-    # 4) Build DataFrame
-    df = pd.DataFrame(
-        index=times.tz_convert(cfg.timezone).tz_localize(None),
-        data={
-            'Elevation': solpos['apparent_elevation'].values,
-            'NS Shadow (%)': ns_pct,
-            'EW Shadow (%)': ew_pct
-        }
-    )
-
-    # 5) Print HH:MM and metrics
+    # 4) Print HH:MM and metrics
     df_print = df.copy()
     df_print['Time'] = df_print.index.strftime('%H:%M')
-    print(df_print[['Time', 'Elevation', 'NS Shadow (%)', 'EW Shadow (%)']].to_string(index=False))
+    print(df_print[['Time', 'Elevation', 'NS Buffer (%)', 'EW Buffer (%)']].to_string(index=False))
 
-    # 6) Peak sun time
+    # 5) Peak sun time
     peak_time = df['Elevation'].idxmax()
-    print(f"\nPeak sun at: {peak_time.strftime('%H:%M')} (Elevation: {df.at[peak_time, 'Elevation']:.1f}°)")
+    print(f"\nPeak sun at: {peak_time.strftime('%H:%M')} "
+          f"(Elevation: {df.at[peak_time, 'Elevation']:.1f}°)")
 
-    # 7) Flight windows
-    ns_windows = find_flight_windows(df, 'NS Shadow (%)', cfg.flight_window.max_ns_shadow_pct)
-    ew_windows = find_flight_windows(df, 'EW Shadow (%)', cfg.flight_window.max_ew_shadow_pct)
+    # 6) Flight windows
+    ns_windows = find_flight_windows(
+        df, 'NS Buffer (%)', cfg.flight_window.max_ns_shadow_pct
+    )
+    ew_windows = find_flight_windows(
+        df, 'EW Buffer (%)', cfg.flight_window.max_ew_shadow_pct
+    )
     print("\nRecommended NS flight windows:")
     for s, e in ns_windows:
         print(f" - {s.strftime('%H:%M')} to {e.strftime('%H:%M')}")
@@ -109,67 +117,60 @@ def main(cfg: DictConfig):
     for s, e in ew_windows:
         print(f" - {s.strftime('%H:%M')} to {e.strftime('%H:%M')}")
 
-    # 8) Plot settings
+    # 7) Plot settings
     major_locator = mdates.HourLocator(interval=1)
-    minor_locator = mdates.MinuteLocator(byminute=[0])
     major_formatter = FuncFormatter(format_time)
+    title_font, label_font, tick_font, leg_font = 18, 14, 12, 12
 
-    # Colors for lines
-    ns_color = 'teal'
-    ew_color = 'purple'
-
-    # Font sizes
-    title_font = 18
-    label_font = 14
-    tick_font = 12
-    legend_font = 12
-
-            # NS Shadow plot
-    day_mask = df['Elevation'] >= 0
+            # NS Buffer plot
     fig, ax = plt.subplots(figsize=tuple(cfg.plot.figure_size))
-    # plot only daytime percentages
-    ax.plot(df.index[day_mask], df['NS Shadow (%)'][day_mask], color=ns_color, linewidth=2.5, label='NS Shadow (%)')
+    day_mask = df['Elevation'] >= 0
+    # plot daytime buffer percent
+    ax.plot(df.index[day_mask], df['NS Buffer (%)'][day_mask], color='teal', linewidth=2.5, label='NS Buffer (%)')
+
     # night shading
-    shade_contiguous(ax, df.index, df['Elevation'] < 0, color='blue', alpha=0.4)
-    # preferred low-shadow periods
-    shade_contiguous(ax, df.index, df['NS Shadow (%)'] <= cfg.flight_window.preferred_ns_shadow_pct, color='gold', alpha=0.3)
+    shade_contiguous(ax, df.index, df['Elevation'] < 0, color='blue', alpha=0.2)
+
+    # highlight flight windows (continuous spans)
+    print('NS windows: ', ns_windows)
+    for start, end in ns_windows:
+        ax.axvspan(start, end, color='yellow', alpha=0.3)
     ax.axvline(peak_time, color='red', linewidth=4, label='Peak Sun')
-    ax.set_title(cfg.plot.title, fontsize=title_font)
+    ax.set_title(f"NS Shadow (%) on {cfg.date}", fontsize=title_font)
     ax.set_xlabel('Time', fontsize=label_font)
-    ax.set_ylabel('NS Shadow (%)', fontsize=label_font)
-    ax.xaxis.set_major_locator(major_locator)
-    ax.xaxis.set_major_formatter(major_formatter)
-    ax.xaxis.set_minor_locator(minor_locator)
-    ax.tick_params(axis='y', labelsize=tick_font)
-    ax.tick_params(axis='x', which='major', labelsize=tick_font)
+    ax.set_ylabel('NS Buffer (%)', fontsize=label_font)
+    ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+    ax.xaxis.set_major_formatter(FuncFormatter(format_time))
+    # ax.xaxis.set_minor_locator(mdates.MinuteLocator(byminute=[0,15,30,45]))
+    ax.tick_params(axis='both', labelsize=tick_font)
     ax.grid(which='major', axis='x', linestyle='--', color='gray')
-    ax.legend(loc='upper right', fontsize=legend_font)
+    ax.grid(which='minor', axis='x', linestyle=':', color='lightgray')
+    ax.legend(loc='upper right', fontsize=leg_font)
     plt.tight_layout()
     plt.show()
-    plt.show()
 
-        # EW Shadow plot
-    day_mask = df['Elevation'] >= 0
+    # EW Buffer plot
     fig, ax = plt.subplots(figsize=tuple(cfg.plot.figure_size))
-    # plot only daytime percentages
-    ax.plot(df.index[day_mask], df['EW Shadow (%)'][day_mask], color=ew_color, linewidth=2.5, label='EW Shadow (%)')
-    # night shading
-    shade_contiguous(ax, df.index, df['Elevation'] < 0, color='blue', alpha=0.4)
-    # preferred low-shadow periods
-    shade_contiguous(ax, df.index, df['EW Shadow (%)'] <= cfg.flight_window.preferred_ew_shadow_pct, color='gold', alpha=0.3)
+    ew_mask = (df['EW Buffer (%)'] <= cfg.flight_window.preferred_ew_shadow_pct) & day_mask
+    ax.plot(df.index[day_mask], df['EW Buffer (%)'][day_mask], color='purple', linewidth=2.5, label='EW Buffer (%)')
+    shade_contiguous(ax, df.index, df['Elevation'] < 0, color='blue', alpha=0.2)
+
+    print('EW windows: ', ew_windows)
+    for start, end in ew_windows:
+        ax.axvspan(start, end, color='yellow', alpha=0.3)
+
     ax.axvline(peak_time, color='red', linewidth=4, label='Peak Sun')
-    ax.set_title(cfg.plot.title, fontsize=title_font)
+    ax.set_title(f"EW Shadow (%) on {cfg.date}", fontsize=title_font)
     ax.set_xlabel('Time', fontsize=label_font)
-    ax.set_ylabel('EW Shadow (%)', fontsize=label_font)
-    ax.xaxis.set_major_locator(major_locator)
-    ax.xaxis.set_major_formatter(major_formatter)
-    ax.xaxis.set_minor_locator(minor_locator)
-    ax.tick_params(axis='y', labelsize=tick_font)
-    ax.tick_params(axis='x', which='major', labelsize=tick_font)
+    ax.set_ylabel('EW Buffer (%)', fontsize=label_font)
+    ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+    ax.xaxis.set_major_formatter(FuncFormatter(format_time))
+    # ax.xaxis.set_minor_locator(mdates.MinuteLocator(byminute=[0,15,30,45]))
+    ax.tick_params(axis='both', labelsize=tick_font)
     ax.grid(which='major', axis='x', linestyle='--', color='gray')
-    ax.legend(loc='upper right', fontsize=legend_font)
+    ax.grid(which='minor', axis='x', linestyle=':', color='lightgray')
+    ax.legend(loc='upper right', fontsize=leg_font)
     plt.tight_layout()
-    plt.show()
     plt.show()
 
 if __name__ == "__main__":

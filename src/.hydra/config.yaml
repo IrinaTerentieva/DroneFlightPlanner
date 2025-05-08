@@ -3,13 +3,14 @@ longitude: -110.35322727751391
 elevation: 800
 timezone: America/Edmonton
 date: '2025-05-15'
-freq: h
-tree_height: 5
+freq: 15T
+tree_height: 10
 flight_window:
   max_ns_shadow_pct: 50
   max_ew_shadow_pct: 50
   preferred_ns_shadow_pct: 30
   preferred_ew_shadow_pct: 30
+buffer_width_m: 10
 plot:
   enabled: true
   figure_size:
