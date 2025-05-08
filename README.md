@@ -122,49 +122,35 @@ LineShadowPlanner/
 | ![EW light shading](examples/EW_light.png) | ![NS light shading](examples/NS_light.png) |
 
 These two panels show the fraction of the 10 m buffer occupied by tree shadows over a 24 h period (in 15 min steps), for a fixed tree height.
-Grey bands indicate night (solar elevation < 0°).
-Yellow fills mark periods when shadow coverage falls below your chosen threshold (e.g. 30 %).
-The vertical dashed line denotes the moment of peak solar elevation.
+
+- Grey bands indicate night (solar elevation < 0°).
+- Yellow fills mark periods when shadow coverage falls below your chosen threshold (e.g. 30 %).
+- The vertical dashed line denotes the moment of peak solar elevation.
 
 **Orientation-based flight windows**  
 ![Orientation planner](examples/flight-planner orientation.png)
+
 Each colored trace represents one forest‐edge line, plotted according to its compass bearing.
 
-Grey shading: Night
-Yellow shading: Approved flight windows (shadow % ≤ threshold)
-Colored curve: Shadow penetration into your buffer
-Red dashed line: Peak sun
+- Grey shading: Night
+- Yellow shading: Approved flight windows (shadow % ≤ threshold)
+- Colored curve: Shadow penetration into your buffer
+- Red dashed line: Peak sun
 
 Pilots can scan the legend to match a line’s orientation (e.g. NE, SW) and immediately see its optimal acquisition windows
 
 **Date-specific planner snapshots**  
-![11 Aug snapshot](examples/flight-planner_11aug.png)  
-![21 Jun snapshot](examples/flight-planner_21june.png)
+| Flight Planner: 21 June | Flight Planner: 11 Aug |
+|:-----------------------------:|:-----------------------------:|
+| ![EW light shading](examples/flight-planner_21june.png) | ![NS light shading](examples/flight-planner_11aug.png) |
 These illustrate the full “height + orientation” planner on two dates: midsummer (21 Jun) versus later summer (11 Aug). Based on canopy heights from the CHM and each segment’s bearing, the planner assigns each segment to one of several pilot‑friendly categories:
 
-Fly any time
-
-More than 8 hr of low‑shadow coverage—virtually unrestricted scheduling.
-
-Fly long morning + evening
-
-≥ 4 hr total, split between early and late in the day.
-
-Fly long noon
-
-≥ 4 hr concentrated around midday.
-
-Fly short morning + evening
-
-< 4 hr but spanning early and late periods.
-
-Fly short noon
-
-< 4 hr in a single midday block.
-
-Fly extra short
-
-< 2.5 hr total—very tight window.
+- Fly any time: More than 8 hr of low‑shadow coverage—virtually unrestricted scheduling.
+- Fly long morning + evening: ≥ 4 hr total, split between early and late in the day.
+- Fly long noon: ≥ 4 hr concentrated around midday.
+- Fly short morning + evening: < 4 hr but spanning early and late periods.
+- Fly short noon: < 4 hr in a single midday block.
+- Fly extra short: < 2.5 hr total—very tight window.
 
 ---
 
