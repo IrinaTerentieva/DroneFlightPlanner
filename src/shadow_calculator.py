@@ -135,7 +135,7 @@ def main(cfg: DictConfig):
     print('NS windows: ', ns_windows)
     for start, end in ns_windows:
         ax.axvspan(start, end, color='yellow', alpha=0.3)
-    ax.axvline(peak_time, color='red', linewidth=4, label='Peak Sun')
+    ax.axvline(peak_time, color='red', linestyle='--', linewidth=2, label='Peak Sun')
     ax.set_title(f"NS Shadow (%) on {cfg.date}", fontsize=title_font)
     ax.set_xlabel('Time', fontsize=label_font)
     ax.set_ylabel('NS Buffer (%)', fontsize=label_font)
@@ -159,7 +159,7 @@ def main(cfg: DictConfig):
     for start, end in ew_windows:
         ax.axvspan(start, end, color='yellow', alpha=0.3)
 
-    ax.axvline(peak_time, color='red', linewidth=4, label='Peak Sun')
+    ax.axvline(peak_time, color='red', linestyle='--', linewidth=2, label='Peak Sun')
     ax.set_title(f"EW Shadow (%) on {cfg.date}", fontsize=title_font)
     ax.set_xlabel('Time', fontsize=label_font)
     ax.set_ylabel('EW Buffer (%)', fontsize=label_font)
