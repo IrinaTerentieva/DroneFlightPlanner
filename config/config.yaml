@@ -25,10 +25,8 @@ simple_time_planner:
   tree_height:              10             # meters (used when no CHM available)
   buffer_width_m:           10   # meters
   flight_window:
-    max_ns_shadow_pct:       50   # upper limit for NS shadow %
-    max_ew_shadow_pct:       50   # upper limit for EW shadow %
-    preferred_ns_shadow_pct: 30   # highlight especially good NS periods
-    preferred_ew_shadow_pct: 30   # highlight especially good EW periods
+    max_shadow_pct:       50   # upper limit for NS shadow %
+    preferred_shadow_pct: 30   # highlight especially good NS periods
   plot:
     enabled:      true
     figure_size: [12, 6]

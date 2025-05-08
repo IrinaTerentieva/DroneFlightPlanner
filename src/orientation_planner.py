@@ -15,7 +15,7 @@ from src.utils import (
     format_windows,
 )
 
-@hydra.main(version_base="1.1", config_path="../config", config_name="config")
+@hydra.main(version_base="1.1", config_path="../config", config_name="config", disable_log=True)
 def main(cfg: DictConfig):
     # 0) short-hands
     loc = cfg.location
@@ -69,7 +69,7 @@ def main(cfg: DictConfig):
         series = pd.Series(pct, index=times)
 
         # find contiguous daylight windows under threshold
-        thresh = stp.flight_window.max_ns_shadow_pct
+        thresh = stp.flight_window.max_shadow_pct
         wins   = find_flight_windows(
             times, series, elev,
             thresh, day_start, day_end

@@ -1,5 +1,3 @@
-### /home/irina/LineShadowPlanner/src/height_and_orientation_planner.py
-import rasterio.mask
 import geopandas as gpd
 import pandas as pd
 import numpy as np
@@ -8,89 +6,108 @@ import rasterio
 from rasterio.mask import mask as rio_mask
 import hydra
 from omegaconf import DictConfig
-from shapely.geometry import LineString, mapping
-from src.height_orientation_utils import (compute_orientation,
-                                          orientation_category,
-                                          calculate_shadow,
-                                          calc_buffer_pct,
-                                          find_windows,
-                                          format_windows,
-                                          compute_total_duration,
-                                          split_line,
-                                          categorize_window
-                                          )
+from shapely.geometry import mapping
 
-# --- main ---
+from src.utils import (
+    compute_orientation,
+    orientation_category,
+    calculate_shadow,
+    calc_buffer_pct,
+    find_windows,
+    format_windows,
+    compute_total_duration,
+    split_line,
+    categorize_window,
+)
 
-@hydra.main(version_base="1.1", config_path="../config", config_name="height_and_orientation_planner")
+@hydra.main(version_base="1.1", config_path="../config", config_name="config")
 def main(cfg: DictConfig):
-    # load data
-    gdf = gpd.read_file(cfg.vector_path)
-    chm = rasterio.open(cfg.chm_path)
+    # 0) Shorthands for each config block
+    loc  = cfg.location
+    hop  = cfg.height_and_orientation_planner
+    stp  = cfg.simple_time_planner
 
-    # solar series
-    freq = cfg.freq.replace("T","min")
-    times = pd.date_range(f"{cfg.date} 00:00", f"{cfg.date} 23:59",
-                          freq=freq, tz=cfg.timezone)
-    sol = pvlib.solarposition.get_solarposition(
-        times, cfg.latitude, cfg.longitude, altitude=cfg.elevation
-    ).tz_convert(cfg.timezone)
-    elev = sol["apparent_elevation"]
-    dt = times[elev>0]
-    start, end = (dt[0], dt[-1]) if len(dt)>0 else (times[0],times[-1])
+    # 1) Load vector & CHM
+    gdf = gpd.read_file(hop.segmentation.vector_path)
+    chm = rasterio.open(hop.chm.path)
 
-    # collect all window strings
-    all_windows = []
+    # 2) Precompute solar series & daylight window
+    freq = loc.freq.replace("T","min")
+    times = pd.date_range(
+        f"{loc.date} 00:00", f"{loc.date} 23:59",
+        freq=freq, tz=loc.timezone
+    )
+    solpos = pvlib.solarposition.get_solarposition(
+        times, loc.latitude, loc.longitude, altitude=loc.elevation
+    ).tz_convert(loc.timezone)
+    elev = solpos["apparent_elevation"]
+    day_times = times[elev > 0]
+    if len(day_times):
+        day_start, day_end = day_times[0], day_times[-1]
+    else:
+        day_start, day_end = times[0], times[-1]
 
-    # process segments
-    rows = []
+    # 3) Split into segments
+    segs = []
     for idx, row in gdf.iterrows():
-        for seg in split_line(row.geometry, cfg.segment_length):
-            # orientation
-            ori = compute_orientation(seg)
-            cat = orientation_category(ori)
+        for seg in split_line(row.geometry, hop.segmentation.segment_length):
+            segs.append({"orig_index": idx, "geometry": seg})
+    sgdf = gpd.GeoDataFrame(segs, crs=gdf.crs)
 
-            # canopy height
-            buf = seg.buffer(cfg.segment_buffer_radius)
-            img, _ = rio_mask(chm, [mapping(buf)], crop=True, filled=False)
-            band = img[0]
-            vals = band.compressed() if hasattr(band,"compressed") else band.filled(np.nan)[~np.isnan(band)]
-            tree_h = float(np.percentile(vals.copy(),75)) if vals.size>0 else cfg.tree_height
+    # 4) Compute per‐segment attributes & flight windows
+    rows = []
+    all_windows = []
+    for seg in sgdf.itertuples():
+        ori = compute_orientation(seg.geometry)
+        cat = orientation_category(ori)
 
-            # buffer% series
-            pct = [ calc_buffer_pct(*calculate_shadow(tree_h, sp.apparent_elevation, sp.azimuth),
-                                   cfg.buffer_width_m, ori) for sp in sol.itertuples() ]
-            series = pd.Series(pct, index=times)
+        # 4a) 75th percentile canopy height around segment
+        buf_poly = seg.geometry.buffer(hop.chm.segment_buffer_radius)
+        img, _ = rio_mask(chm, [mapping(buf_poly)], crop=True, filled=False)
+        band = img[0]
+        if hasattr(band, "compressed"):
+            vals = band.compressed()
+        else:
+            arr = band.filled(np.nan)
+            vals = arr[~np.isnan(arr)]
+        tree_h = float(np.percentile(vals.copy(), 75)) if vals.size else sh.tree_height
 
-            # windows & duration
-            wins = find_windows(times, series, elev,
-                                cfg.flight_window.max_buffer_pct, start, end)
-            win_str = format_windows(wins)
-            dur = compute_total_duration(wins)
-            all_windows.append(win_str)
+        # 4b) Build buffer‐% series along segment orientation
+        pct = []
+        for sp in solpos.itertuples():
+            length, direction = calculate_shadow(tree_h, sp.apparent_elevation, sp.azimuth)
+            pct.append(calc_buffer_pct(length, direction, stp.buffer_width_m, ori))
+        series = pd.Series(pct, index=times)
 
-            # category
-            win_cat = categorize_window(win_str)
+        # 4c) Find flight windows under threshold
+        thresh = stp.flight_window.preferred_shadow_pct
+        wins = find_windows(times, series, elev, thresh, day_start, day_end)
+        win_str = format_windows(wins)
+        all_windows.append(win_str)
 
-            rows.append({
-                "orig_index": idx,
-                "orientation": ori,
-                "dir_category": cat,
-                "canopy_h75": tree_h,
-                "flight_windows": win_str,
-                "flight_duration_h": dur,
-                "window_category": win_cat,
-                "geometry": seg
-            })
+        # 4d) Compute duration and category
+        dur = compute_total_duration(wins)
+        win_cat = categorize_window(win_str)
 
-    # unique windows
+        rows.append({
+            "orig_index":      seg.orig_index,
+            "orientation":     ori,
+            "dir_category":    cat,
+            "canopy_h75":      tree_h,
+            "flight_windows":  win_str,
+            "flight_duration": dur,
+            "window_category": win_cat,
+            "geometry":        seg.geometry
+        })
+
+    # 5) Report unique patterns and save
     uniq = sorted(set(all_windows))
     print("Unique windows:", uniq)
 
-    out = gpd.GeoDataFrame(rows, crs=gdf.crs)
-    path = cfg.vector_path.replace(".gpkg","_segments_with_windows.gpkg")
-    out.to_file(path, driver="GPKG")
-    print(f"Saved to {path}")
+    out_gdf = gpd.GeoDataFrame(rows, crs=gdf.crs)
+    out_path = hop.segmentation.vector_path.replace(".gpkg", "_segments_with_windows.gpkg")
+    out_gdf.to_file(out_path, driver="GPKG")
+    print(f"Saved to {out_path}")
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()

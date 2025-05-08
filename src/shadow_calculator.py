@@ -16,7 +16,7 @@ from src.utils import (
     format_time
 )
 
-@hydra.main(version_base=None, config_path="../config", config_name="config")
+@hydra.main(version_base=None, config_path="../config", config_name="config", disable_log=True)
 def main(cfg: DictConfig):
     # shorthand for nested blocks
     loc  = cfg.location
@@ -67,10 +67,10 @@ def main(cfg: DictConfig):
 
     # 6) Flight windows
     ns_windows = find_flight_windows(df.index, df["NS Shadow (%)"], df["Elevation"],
-                                     stp.flight_window.max_ns_shadow_pct,
+                                     stp.flight_window.max_shadow_pct,
                                      df.index[0], df.index[-1])
     ew_windows = find_flight_windows(df.index, df["EW Shadow (%)"], df["Elevation"],
-                                     stp.flight_window.max_ew_shadow_pct,
+                                     stp.flight_window.max_shadow_pct,
                                      df.index[0], df.index[-1])
 
     print("\nRecommended NS flight windows:")

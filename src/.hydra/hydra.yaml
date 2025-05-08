@@ -113,7 +113,7 @@ hydra:
     - hydra.mode=RUN
     task: []
   job:
-    name: line_orientation_planner
+    name: height_and_orientation_planner
     chdir: null
     override_dirname: ''
     id: ???

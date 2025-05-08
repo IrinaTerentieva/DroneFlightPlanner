@@ -11,10 +11,8 @@ simple_time_planner:
   tree_height: 10
   buffer_width_m: 10
   flight_window:
-    max_ns_shadow_pct: 50
-    max_ew_shadow_pct: 50
-    preferred_ns_shadow_pct: 30
-    preferred_ew_shadow_pct: 30
+    max_shadow_pct: 50
+    preferred_shadow_pct: 30
   plot:
     enabled: true
     figure_size:
