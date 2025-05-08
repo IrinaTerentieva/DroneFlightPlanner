@@ -74,40 +74,97 @@ python src/shadow_calculator.py date=2025-04-29 tree_height=15 latitude=53.5
 From the project root:
 
 ```bash
-python src/shadow_calculator.py
+python simple_time_planner.py
 ```
+- Prints a 15-min table of solar elevation & NS/EW shadow percentages.
+- Pops up an NS/EW coverage plot.
 
-This will print a table of hourly shadow metrics and pop up a matplotlib plot of NS/EW shadow percentages.
+```bash
+python orientation_planner.py
+```
+- Reads orientation_planner.vector_path
+- Appends orientation (°), dir_category (N, ENE, etc.) and flight windows to the GPKG.
 
+```bash
+python height_orientation_planner.py
+```
+- Splits each line into segments of segment_length
+- Samples CHM around each segment to get 75th‐percentile canopy height
+- Computes buffer penetration % per segment orientation
+- Writes segment‐level flight_windows, canopy_h75, and categories back to GPKG.
+- 
 ---
 
 ## 📂 Project Structure
 
 ```
 LineShadowPlanner/
-├── config/              
-│   └── config.yaml      # Hydra defaults  
-├── src/                 
-│   └── shadow_calculator.py  
-├── README.md            
-└── LICENSE              # MIT License  
+├── config/                          
+│   └── config.yaml           ← Hydra defaults for all three scripts
+├── examples/                 
+│   ├── EW_light.png          
+│   ├── flight-planner.png    
+│   └── …                      
+├── simple_time_planner.py            ← NS/EW time-of-day planner
+├── orientation_planner.py            ← orientation-based planner
+├── height_orientation_planner.py     ← CHM + orientation planner
+├── src/                       
+│   └── utils.py              ← shared helper functions
+├── LICENSE                    
+└── README.md  
 ```
 
 ## 📊 Examples
 
+**Light conditions for EW and NS lines**  
+| Light conditions for EW lines | Light conditions for NS lines |
+|:-----------------------------:|:-----------------------------:|
+| ![EW light shading](examples/EW_light.png) | ![NS light shading](examples/NS_light.png) |
 
-**Light conditions for EW lines**  
-![EW light shading](examples/EW_light.png)
-
-**Light conditions for NS lines**  
-![NS light shading](examples/NS_light.png)
+These two panels show the fraction of the 10 m buffer occupied by tree shadows over a 24 h period (in 15 min steps), for a fixed tree height.
+Grey bands indicate night (solar elevation < 0°).
+Yellow fills mark periods when shadow coverage falls below your chosen threshold (e.g. 30 %).
+The vertical dashed line denotes the moment of peak solar elevation.
 
 **Orientation-based flight windows**  
 ![Orientation planner](examples/flight-planner orientation.png)
+Each colored trace represents one forest‐edge line, plotted according to its compass bearing.
+
+Grey shading: Night
+Yellow shading: Approved flight windows (shadow % ≤ threshold)
+Colored curve: Shadow penetration into your buffer
+Red dashed line: Peak sun
+
+Pilots can scan the legend to match a line’s orientation (e.g. NE, SW) and immediately see its optimal acquisition windows
 
 **Date-specific planner snapshots**  
 ![11 Aug snapshot](examples/flight-planner_11aug.png)  
 ![21 Jun snapshot](examples/flight-planner_21june.png)
+These illustrate the full “height + orientation” planner on two dates: midsummer (21 Jun) versus later summer (11 Aug). Based on canopy heights from the CHM and each segment’s bearing, the planner assigns each segment to one of several pilot‑friendly categories:
+
+Fly any time
+
+More than 8 hr of low‑shadow coverage—virtually unrestricted scheduling.
+
+Fly long morning + evening
+
+≥ 4 hr total, split between early and late in the day.
+
+Fly long noon
+
+≥ 4 hr concentrated around midday.
+
+Fly short morning + evening
+
+< 4 hr but spanning early and late periods.
+
+Fly short noon
+
+< 4 hr in a single midday block.
+
+Fly extra short
+
+< 2.5 hr total—very tight window.
 
 ---
 
@@ -123,7 +180,9 @@ Developed by:
 ## 👩‍💻 Contributors
 
 - **Irina Terentieva** · irina.terenteva@ucalgary.ca
-
+- **Falcon & Swift Geomatics Ltd.**
+- **BERA Project** (Boreal Ecosytem Recovery and Assessment)
+- 
 ---
 
 ## 📄 License
