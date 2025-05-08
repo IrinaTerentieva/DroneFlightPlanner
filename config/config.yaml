@@ -16,7 +16,7 @@ location:
   longitude:   -110.35322727751391   # degrees
   elevation:      800                # meters above sea level
   timezone:     "America/Edmonton"
-  date:        "2024-08-11"          # YYYY-MM-DD
+  date:        "2024-06-21"          # YYYY-MM-DD
   freq:         "15T"                # e.g. "15T" = 15-minute intervals
 
 # ─────────────────────────────────────────────────────────────────────────────

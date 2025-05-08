@@ -82,6 +82,24 @@ LineShadowPlanner/
 └── LICENSE              # MIT License  
 ```
 
+## 📊 Examples
+
+**Default NS/EW shadow coverage**  
+![NS vs EW shadow coverage](examples/flight-planner.png)
+
+**Orientation-based flight windows**  
+![Orientation planner](examples/flight-planner orientation.png)
+
+**Light conditions for EW lines**  
+![EW light shading](examples/EW_light.png)
+
+**Light conditions for NS lines**  
+![NS light shading](examples/NS_light.png)
+
+**Date-specific planner snapshots**  
+![11 Aug snapshot](examples/flight-planner_11aug.png)  
+![21 Jun snapshot](examples/flight-planner_21june.png)
+
 ---
 
 ## 🤝 Acknowledgments
