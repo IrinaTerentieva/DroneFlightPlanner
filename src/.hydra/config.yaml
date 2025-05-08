@@ -1,6 +1,18 @@
 latitude: 54.938643706057285
 longitude: -110.35322727751391
 elevation: 800
-tree_height: 10
-date: '2024-08-09'
 timezone: America/Edmonton
+date: '2025-05-15'
+freq: h
+tree_height: 5
+flight_window:
+  max_ns_shadow_pct: 50
+  max_ew_shadow_pct: 50
+  preferred_ns_shadow_pct: 30
+  preferred_ew_shadow_pct: 30
+plot:
+  enabled: true
+  figure_size:
+  - 12
+  - 6
+  title: Shadow Coverage on ${date}

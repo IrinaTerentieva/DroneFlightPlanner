@@ -1,15 +1,29 @@
 # config/config.yaml
 # ------------------
-# Default parameters for your shadow‐calculation run
-
 hydra:
   run:
-    # keep outputs in the working dir rather than create new Hydra output folders
     dir: .
 
+# Location & time settings
 latitude: 54.938643706057285
 longitude: -110.35322727751391
-elevation: 800            # meters above sea level
-tree_height: 10           # height of the tree in meters
-date: "2024-08-09"        # YYYY-MM-DD
+elevation: 800           # meters above sea level
 timezone: "America/Edmonton"
+
+date: "2025-05-15"     # YYYY-MM-DD
+freq: "h"               # pandas frequency for timestamps (use lowercase)
+
+# Tree & shadow settings
+tree_height: 5         # height of the tree in meters
+
+flight_window:
+  max_ns_shadow_pct:      50    # upper limit for acceptable NS shadow
+  max_ew_shadow_pct:      50    # upper limit for acceptable EW shadow
+  preferred_ns_shadow_pct: 30   # highlight especially good NS conditions
+  preferred_ew_shadow_pct: 30   # highlight especially good EW conditions
+
+# Plotting options
+plot:
+  enabled: true
+  figure_size: [12, 6]
+  title: "Shadow Coverage on ${date}"
