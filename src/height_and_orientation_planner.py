@@ -70,7 +70,7 @@ def main(cfg: DictConfig):
         else:
             arr = band.filled(np.nan)
             vals = arr[~np.isnan(arr)]
-        tree_h = float(np.percentile(vals.copy(), 75)) if vals.size else sh.tree_height
+        tree_h = float(np.percentile(vals.copy(), 75)) if vals.size else stp.tree_height
 
         # 4b) Build buffer‐% series along segment orientation
         pct = []
@@ -102,7 +102,6 @@ def main(cfg: DictConfig):
 
     # 5) Report unique patterns and save
     uniq = sorted(set(all_windows))
-    print("Unique windows:", uniq)
 
     out_gdf = gpd.GeoDataFrame(rows, crs=gdf.crs)
     out_path = hop.segmentation.vector_path.replace(".gpkg", "_segments_with_windows.gpkg")
