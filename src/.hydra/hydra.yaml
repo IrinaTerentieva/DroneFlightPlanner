@@ -113,7 +113,7 @@ hydra:
     - hydra.mode=RUN
     task: []
   job:
-    name: shadow_calculator
+    name: line_shadow_planner
     chdir: null
     override_dirname: ''
     id: ???
@@ -128,7 +128,7 @@ hydra:
         exclude_keys: []
   runtime:
     version: 1.3.2
-    version_base: '1.3'
+    version_base: '1.1'
     cwd: /home/irina/LineShadowPlanner/src
     config_sources:
     - path: hydra.conf

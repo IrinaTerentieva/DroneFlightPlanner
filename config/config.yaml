@@ -22,6 +22,7 @@ flight_window:
   max_ew_shadow_pct:      50    # upper limit for acceptable EW shadow
   preferred_ns_shadow_pct: 30   # highlight especially good NS conditions
   preferred_ew_shadow_pct: 30   # highlight especially good EW conditions
+  max_buffer_pct: 30
 
 
 buffer_width_m: 10
@@ -31,3 +32,9 @@ plot:
   enabled: true
   figure_size: [12, 6]
   title: "Shadow Coverage on ${date}"
+
+
+vector_path: "/media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg"
+chm_path: "/media/irina/My Book1/LiDea_Pilot/LiDea1_nCHM10cm_2023.tif"
+output_field: "flight_windows"
+use_line_coords: True
