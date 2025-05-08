@@ -2,25 +2,12 @@ latitude: 54.938643706057285
 longitude: -110.35322727751391
 elevation: 800
 timezone: America/Edmonton
-date: '2025-05-15'
+date: '2024-08-09'
 freq: 15T
 tree_height: 10
-flight_window:
-  max_ns_shadow_pct: 50
-  max_ew_shadow_pct: 50
-  preferred_ns_shadow_pct: 30
-  preferred_ew_shadow_pct: 30
-  max_buffer_pct: 30
 buffer_width_m: 10
-plot:
-  enabled: true
-  figure_size:
-  - 12
-  - 6
-  title: Shadow Coverage on ${date}
-vector_path: /media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg
-chm_path: /media/irina/My Book1/LiDea_Pilot/LiDea1_nCHM10cm_2023.tif
-output_field: flight_windows
-use_line_coords: true
 segment_length: 100
-segment_buffer_radius: 25
+flight_window:
+  max_buffer_pct: 50
+vector_path: /media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg
+output_field: flight_windows

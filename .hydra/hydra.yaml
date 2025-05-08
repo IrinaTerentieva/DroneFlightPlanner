@@ -113,12 +113,12 @@ hydra:
     - hydra.mode=RUN
     task: []
   job:
-    name: shadow_calculator
+    name: line_orientation_planner
     chdir: null
     override_dirname: ''
     id: ???
     num: ???
-    config_name: config
+    config_name: orientation_planner
     env_set: {}
     env_copy: []
     config:
@@ -128,7 +128,7 @@ hydra:
         exclude_keys: []
   runtime:
     version: 1.3.2
-    version_base: '1.3'
+    version_base: '1.1'
     cwd: /home/irina/LineShadowPlanner
     config_sources:
     - path: hydra.conf

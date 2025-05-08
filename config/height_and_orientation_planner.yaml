@@ -1,0 +1,28 @@
+hydra:
+  run:
+    dir: .
+
+# ————— Location & Time —————
+latitude:        54.938643706057285
+longitude:      -110.35322727751391
+elevation:       800               # meters above sea level
+timezone:       "America/Edmonton"
+date:           "2024-08-09"      # YYYY-MM-DD
+freq:           "15T"             # pandas frequency for timestamps
+
+# ————— Canopy & Buffer —————
+tree_height:           10          # default if CHM empty
+buffer_width_m:        10          # width perpendicular to line for shadow buffer
+segment_buffer_radius: 25          # CHM sampling radius around each segment (m)
+
+# ————— Segmentation —————
+segment_length:       100          # segment length in metres
+
+# ————— Flight Window —————
+flight_window:
+  max_buffer_pct:     50           # threshold % under which flight is acceptable
+
+# ————— I/O —————
+vector_path:         "/media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg"
+chm_path:            "/media/irina/My Book1/LiDea_Pilot/LiDea1_nCHM10cm_2023.tif"
+output_field:        "flight_windows"  # name of attribute to write
