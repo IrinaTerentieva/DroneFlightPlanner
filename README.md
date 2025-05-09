@@ -11,6 +11,8 @@ A lightweight, Hydra-powered toolkit to plan drone flights along seismic lines b
 3. **Height & Orientation Planner** (`height_orientation_planner.py`)  
    Like the Orientation-Only Planner, but also samples a canopy-height model (CHM) around each segment to estimate tree height per segment.
 
+LineShadowPlanner was developed by the [Applied Geospatial Research Group](https://www.appliedgrg.ca/) at the University of Calgary, led by Dr. Greg McDermid, in collaboration with [Falcon & Swift Geomatics Ltd](https://www.falconandswift.ca/), an environmental consulting company supporting the planning and monitoring of recovery initiatives across Western Canada.
+
 ---
 
 ## 🚀 Features
@@ -168,17 +170,12 @@ These illustrate the full “height + orientation” planner on two dates: midsu
 
 Developed by:
 
-- **Falcon & Swift Geomatics Ltd.**  
-- **BERA** (Boreal Ecological Restoration Alliance)
+    Applied Geospatial Research Group, University of Calgary
+         https://www.appliedgrg.ca/
 
----
+    Falcon & Swift Geomatics Ltd
+      https://www.falconandswift.ca/
 
-## 👩‍💻 Contributors
-
-- **Irina Terentieva** · irina.terenteva@ucalgary.ca
-- **Falcon & Swift Geomatics Ltd.**
-- **BERA Project** (Boreal Ecosytem Recovery and Assessment)
-- 
 ---
 
 ## 📄 License
