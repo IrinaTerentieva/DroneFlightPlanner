@@ -2,7 +2,7 @@
 
 A lightweight, Hydra-powered toolkit to plan drone flights along seismic lines by minimizing tree shadows. 
 
-Drone surveys along narrow, linear features (seismic lines, trails, roads) are highly sensitive to tree‐cast shadows: shaded areas obscure ground detail, introduce noise into photogrammetry and LiDAR returns, and ultimately degrade the quality of canopy and terrain models. Because shadow lengths and directions vary with the sun’s elevation, the date, the local canopy height, and the orientation of each line, choosing the right window for data acquisition is critical.
+Drone surveys along narrow, linear features (seismic lines, trails, roads) are highly sensitive to tree‐cast shadows: shaded areas obscure ground detail, introduce noise into photogrammetry and LiDAR returns, and ultimately degrade the quality of the imagery. Because shadow lengths and directions vary with the sun’s elevation, the date, the local canopy height, and the orientation of each line, choosing the right window for data acquisition is critical.
 
 This planner automates that choice by combining:
 
