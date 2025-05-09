@@ -15,7 +15,8 @@ This planner automates that choice by combining:
 3. **Height & Orientation Planner** (`height_orientation_planner.py`)  
     Height‐and‐orientation planning, which refines those windows using actual canopy heights extracted from a canopy‐height model (CHM).
 
-Use it to pinpoint when to fly—minimizing shadows, maximizing data quality, and ensuring efficient mission planning.
+Use it to pinpoint when to fly - minimizing shadows, maximizing data quality, and ensuring efficient mission planning.
+
 LineShadowPlanner was developed by the [Applied Geospatial Research Group](https://www.appliedgrg.ca/) at the University of Calgary, led by Dr. Greg McDermid, in collaboration with [Falcon & Swift Geomatics Ltd](https://www.falconandswift.ca/), an environmental consulting company supporting the planning and monitoring of recovery initiatives across Western Canada.
 
 ---
