@@ -1,16 +1,21 @@
 # LineShadowPlanner
 
-A lightweight, Hydra-powered toolkit to plan drone flights along seismic lines by minimizing tree shadows. Three flavors:
+A lightweight, Hydra-powered toolkit to plan drone flights along seismic lines by minimizing tree shadows. 
+
+Drone surveys along narrow, linear features (seismic lines, trails, roads) are highly sensitive to tree‐cast shadows: shaded areas obscure ground detail, introduce noise into photogrammetry and LiDAR returns, and ultimately degrade the quality of canopy and terrain models. Because shadow lengths and directions vary with the sun’s elevation, the date, the local canopy height, and the orientation of each line, choosing the right window for data acquisition is critical.
+
+This planner automates that choice by combining:
 
 1. **Simple Time Planner** (`simple_time_planner.py`)  
-   Computes NS/EW shadow percentages over a day for a single location & tree height.
+    Simple time‐of‐day analysis, which finds low‐shadow periods for a fixed tree height and a given line orientation (NS vs EW),
 
 2. **Orientation-Only Planner** (`orientation_planner.py`)  
-   Reads a GeoPackage of line geometries, computes each line’s bearing, and finds best flight windows based on that orientation.
+    Orientation‐based scheduling, which computes optimal windows for each line segment based solely on its orientation
 
 3. **Height & Orientation Planner** (`height_orientation_planner.py`)  
-   Like the Orientation-Only Planner, but also samples a canopy-height model (CHM) around each segment to estimate tree height per segment.
+    Height‐and‐orientation planning, which refines those windows using actual canopy heights extracted from a canopy‐height model (CHM).
 
+Use it to pinpoint when to fly—minimizing shadows, maximizing data quality, and ensuring efficient mission planning.
 LineShadowPlanner was developed by the [Applied Geospatial Research Group](https://www.appliedgrg.ca/) at the University of Calgary, led by Dr. Greg McDermid, in collaboration with [Falcon & Swift Geomatics Ltd](https://www.falconandswift.ca/), an environmental consulting company supporting the planning and monitoring of recovery initiatives across Western Canada.
 
 ---
