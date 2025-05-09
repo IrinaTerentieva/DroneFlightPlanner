@@ -179,7 +179,7 @@ These illustrate the full “height + orientation” planner on two dates: midsu
 Developed by:
 
     Applied Geospatial Research Group, University of Calgary
-         https://www.appliedgrg.ca/
+      https://www.appliedgrg.ca/
 
     Falcon & Swift Geomatics Ltd
       https://www.falconandswift.ca/
