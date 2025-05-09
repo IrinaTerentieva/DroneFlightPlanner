@@ -127,18 +127,19 @@ LineShadowPlanner/
 
 ## 📊 Examples
 
-**Light conditions for EW and NS lines**  
+### **Light conditions for EW and NS lines**  
 | Light conditions for EW lines | Light conditions for NS lines |
 |:-----------------------------:|:-----------------------------:|
 | ![EW light shading](examples/EW_light.png) | ![NS light shading](examples/NS_light.png) |
 
 These two panels show the fraction of the 10 m buffer occupied by tree shadows over a 24 h period (in 15 min steps), for a fixed tree height.
 
-- Grey bands indicate night (solar elevation < 0°).
+- Blue bands indicate night (solar elevation < 0°).
 - Yellow fills mark periods when shadow coverage falls below your chosen threshold (e.g. 30 %).
 - The vertical dashed line denotes the moment of peak solar elevation.
 
-**Orientation-based flight windows**  
+
+### **Orientation-based flight windows**  
 ![Orientation planner](examples/flight-planner_orientation.png)
 
 Each colored trace represents one forest‐edge line, plotted according to its compass bearing.
@@ -150,7 +151,8 @@ Each colored trace represents one forest‐edge line, plotted according to its c
 
 Pilots can scan the legend to match a line’s orientation (e.g. NE, SW) and immediately see its optimal acquisition windows
 
-**Date-specific planner snapshots**  
+
+### **Date-specific planner snapshots**
 
 ![EW light shading](examples/flight-planner_21june.png)
 ![NS light shading](examples/flight-planner_11aug.png)
