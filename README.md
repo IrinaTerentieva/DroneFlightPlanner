@@ -159,12 +159,12 @@ Pilots can scan the legend to match a line’s orientation (e.g. NE, SW) and imm
 
 These illustrate the full “height + orientation” planner on two dates: midsummer (21 Jun) versus later summer (11 Aug). Based on canopy heights from the CHM and each segment’s bearing, the planner assigns each segment to one of several pilot‑friendly categories:
 
-- Fly any time: More than 8 hr of low‑shadow coverage—virtually unrestricted scheduling.
-- Fly long morning + evening: ≥ 4 hr total, split between early and late in the day.
-- Fly long noon: ≥ 4 hr concentrated around midday.
-- Fly short morning + evening: < 4 hr but spanning early and late periods.
-- Fly short noon: < 4 hr in a single midday block.
-- Fly extra short: < 2.5 hr total—very tight window.
+- **Fly any time**: More than 8 hours of low-shadow coverage - nearly the entire daylight period is suitable for surveying.
+- **Fly long morning + evening**: At least 4 hours of low-shadow coverage split between early morning and late afternoon.
+- **Fly long noon**: At least 4 hours of low-shadow coverage concentrated around solar noon.
+- **Fly short morning + evening**: Less than 4 hours total split between early morning and late afternoon.
+- **Fly short noon**: Less than 4 hours in a single midday window.
+- **Fly extra short**: Under 2.5 hours of acceptable light—only very limited time slots available; requires precise scheduling.
 
 ---
 
