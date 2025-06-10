@@ -184,7 +184,7 @@ class DetailedMobilityVisibilityAnalyzer:
                     print(f"      Warning: Could not find suitable terrain for random point {i}")
         else:
             # Strategic radial pattern with terrain validation
-            num_rings = 3
+            num_rings = 5
             points_per_ring = (num_points - 1) // num_rings
             pid = 1
 
@@ -731,8 +731,8 @@ if __name__ == "__main__":
 
     # Analysis parameters
     MOBILITY_BUFFER = 50.0  # 100m operator movement radius
-    NUM_SAMPLE_POINTS = 20  # Strategic sample points
-    NUM_RAYS = 180  # 5° increments for high accuracy
+    NUM_SAMPLE_POINTS = 50  # Strategic sample points
+    NUM_RAYS = 360  # 5° increments for high accuracy
     ELEVATION_ANGLE = 5.0  # 5° elevation angle
     MAX_DISTANCE = 3000  # 3km analysis radius
     SAMPLING_METHOD = 'strategic'  # 'strategic' or 'random'
