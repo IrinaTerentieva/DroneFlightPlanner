@@ -76,84 +76,50 @@ class DetailedMobilityVisibilityAnalyzer:
             return float(self.dsm[row, col])
         return np.nan
 
-    def _find_suitable_location(self, target_x, target_y, search_radius=3.0, max_attempts=10):
+    def _find_suitable_location(self, center_x, center_y, search_radius=3.0):
         """
-        Find a suitable location near target coordinates where operator can actually stand
-        Looks for areas with minimal local elevation variation (flat ground, not tree tops)
-
-        Args:
-            target_x, target_y: Target coordinates
-            search_radius: Search radius in meters (default 3m)
-            max_attempts: Maximum search attempts
-
-        Returns:
-            Tuple of (x, y, elevation, suitability_score) or None if no suitable location found
+        Find the lowest elevation within a radius (meters) of (center_x, center_y).
+        Returns (x, y, elevation).
         """
-        best_location = None
-        best_score = float('inf')  # Lower score = better (less elevation variation)
+        row_c, col_c = self._world_to_pixel(center_x, center_y)
+        radius_pix = int(np.ceil(search_radius / self.pixel_size))
 
-        for attempt in range(max_attempts):
-            # Generate random offset within search radius
-            angle = np.random.uniform(0, 2 * np.pi)
-            distance = np.random.uniform(0, search_radius)
+        # Clip a square window around center
+        row_min = max(0, row_c - radius_pix)
+        row_max = min(self.dsm.shape[0], row_c + radius_pix + 1)
+        col_min = max(0, col_c - radius_pix)
+        col_max = min(self.dsm.shape[1], col_c + radius_pix + 1)
 
-            test_x = target_x + distance * np.cos(angle)
-            test_y = target_y + distance * np.sin(angle)
+        window = self.dsm[row_min:row_max, col_min:col_max]
 
-            # Get elevation at test point
-            test_row, test_col = self._world_to_pixel(test_x, test_y)
-            center_elevation = self._get_elevation_safe(test_row, test_col)
+        # Make a circular mask
+        y_idx, x_idx = np.ogrid[:window.shape[0], :window.shape[1]]
+        dist = np.sqrt((y_idx - (row_c - row_min)) ** 2 + (x_idx - (col_c - col_min)) ** 2) * self.pixel_size
+        mask = dist <= search_radius
 
-            if np.isnan(center_elevation):
-                continue
+        valid = window.copy()
+        valid[~mask] = np.nan
+        if np.all(np.isnan(valid)):
+            return None  # No valid points
 
-            # Check 3m neighborhood around this point for elevation variation
-            neighborhood_elevations = []
-            check_radius_pixels = int(3.0 / self.pixel_size)  # 3m in pixels
-
-            for dr in range(-check_radius_pixels, check_radius_pixels + 1):
-                for dc in range(-check_radius_pixels, check_radius_pixels + 1):
-                    check_row = test_row + dr
-                    check_col = test_col + dc
-
-                    # Skip if outside bounds
-                    if not (0 <= check_row < self.dsm.shape[0] and 0 <= check_col < self.dsm.shape[1]):
-                        continue
-
-                    # Calculate distance from center
-                    pixel_distance = np.sqrt(dr ** 2 + dc ** 2) * self.pixel_size
-                    if pixel_distance <= 3.0:  # Within 3m
-                        elev = self._get_elevation_safe(check_row, check_col)
-                        if not np.isnan(elev):
-                            neighborhood_elevations.append(elev)
-
-            if len(neighborhood_elevations) < 5:  # Need minimum data points
-                continue
-
-            # Calculate suitability score based on elevation variation
-            neighborhood_elevations = np.array(neighborhood_elevations)
-            elevation_std = np.std(neighborhood_elevations)
-            elevation_range = np.max(neighborhood_elevations) - np.min(neighborhood_elevations)
-
-            # Suitability score: lower is better
-            # Penalize high standard deviation and large elevation range
-            suitability_score = elevation_std + (elevation_range * 0.5)
-
-            # Prefer locations with minimal elevation variation (flat areas)
-            if suitability_score < best_score:
-                best_score = suitability_score
-                best_location = (test_x, test_y, center_elevation, suitability_score)
-
-        return best_location
+        min_idx = np.nanargmin(valid)
+        min_row_local, min_col_local = np.unravel_index(min_idx, valid.shape)
+        min_row = row_min + min_row_local
+        min_col = col_min + min_col_local
+        min_elev = valid[min_row_local, min_col_local]
+        # Convert back to x,y
+        from rasterio.transform import xy
+        min_x, min_y = xy(self.transform, min_row, min_col, offset='center')
+        return min_x, min_y, min_elev
 
     def _generate_sample_points(self, center_x, center_y, buffer_radius, num_points=20, sampling='strategic'):
         """Generate sample points with terrain validation for suitable operator locations"""
         points = []
 
         # Center point - validate it's suitable
-        center_location = self._find_suitable_location(center_x, center_y, search_radius=3.0)
+        center_location = self._find_suitable_location(center_x, center_y)
         if center_location:
-            actual_x, actual_y, actual_elev, score = center_location
+            actual_x, actual_y, actual_elev = center_location
             points.append({
                 'point_id': 0,
                 'coords': (actual_x, actual_y),
@@ -161,7 +127,7 @@ class DetailedMobilityVisibilityAnalyzer:
                 'bearing_from_center': 0.0,
                 'point_type': 'center',
                 'elevation': actual_elev,
-                'terrain_suitability': score
+                # 'terrain_suitability': score
             })
             if self.verbose:
                 print(
@@ -177,7 +143,7 @@ class DetailedMobilityVisibilityAnalyzer:
                 'bearing_from_center': 0.0,
                 'point_type': 'center',
                 'elevation': center_elev,
-                'terrain_suitability': 999.0  # High score = poor suitability
+                # 'terrain_suitability': 999.0  # High score = poor suitability
             })
 
         if num_points == 1:
@@ -198,7 +164,7 @@ class DetailedMobilityVisibilityAnalyzer:
                     suitable_location = self._find_suitable_location(target_x, target_y, search_radius=3.0)
 
                     if suitable_location:
-                        actual_x, actual_y, actual_elev, score = suitable_location
+                        actual_x, actual_y, actual_elev = suitable_location
                         actual_r = np.sqrt((actual_x - center_x) ** 2 + (actual_y - center_y) ** 2)
                         bearing = np.degrees(np.arctan2(actual_y - center_y, actual_x - center_x)) % 360
 
@@ -209,7 +175,7 @@ class DetailedMobilityVisibilityAnalyzer:
                             'bearing_from_center': bearing,
                             'point_type': 'random',
                             'elevation': actual_elev,
-                            'terrain_suitability': score
+                            # 'terrain_suitability': score
                         })
                         placed = True
                         break
@@ -240,7 +206,7 @@ class DetailedMobilityVisibilityAnalyzer:
                     suitable_location = self._find_suitable_location(target_x, target_y, search_radius=3.0)
 
                     if suitable_location:
-                        actual_x, actual_y, actual_elev, score = suitable_location
+                        actual_x, actual_y, actual_elev = suitable_location
                         actual_r = np.sqrt((actual_x - center_x) ** 2 + (actual_y - center_y) ** 2)
                         bearing = (90 - np.degrees(np.arctan2(actual_y - center_y, actual_x - center_x))) % 360
 
@@ -251,7 +217,7 @@ class DetailedMobilityVisibilityAnalyzer:
                             'bearing_from_center': bearing,
                             'point_type': f'ring_{ring}',
                             'elevation': actual_elev,
-                            'terrain_suitability': score
+                            # 'terrain_suitability': score
                         })
                     else:
                         # Fallback to original location if no suitable terrain found
@@ -266,7 +232,7 @@ class DetailedMobilityVisibilityAnalyzer:
                             'bearing_from_center': bearing,
                             'point_type': f'ring_{ring}',
                             'elevation': test_elev if not np.isnan(test_elev) else 0.0,
-                            'terrain_suitability': 999.0  # Poor suitability flag
+                            # 'terrain_suitability': 999.0  # Poor suitability flag
                         })
 
                         if self.verbose:
@@ -279,13 +245,13 @@ class DetailedMobilityVisibilityAnalyzer:
                 if pid >= num_points:
                     break
 
-        # Report terrain suitability statistics
-        if self.verbose and len(points) > 1:
-            suitable_points = [p for p in points if p['terrain_suitability'] < 10.0]  # Good terrain
-            print(f"      Terrain validation: {len(suitable_points)}/{len(points)} points in suitable locations")
-            avg_suitability = np.mean([p['terrain_suitability'] for p in points if p['terrain_suitability'] < 100])
-            if len(suitable_points) > 0:
-                print(f"      Average terrain suitability score: {avg_suitability:.2f} (lower = flatter)")
+        # # Report terrain suitability statistics
+        # if self.verbose and len(points) > 1:
+        #     suitable_points = [p for p in points if p['terrain_suitability'] < 10.0]  # Good terrain
+        #     print(f"      Terrain validation: {len(suitable_points)}/{len(points)} points in suitable locations")
+        #     avg_suitability = np.mean([p['terrain_suitability'] for p in points if p['terrain_suitability'] < 100])
+            # if len(suitable_points) > 0:
+            #     print(f"      Average terrain suitability score: {avg_suitability:.2f} (lower = flatter)")
 
         return points[:num_points]
 
@@ -460,7 +426,7 @@ class DetailedMobilityVisibilityAnalyzer:
                     'visibility_area_ha': sample_area,
                     'distance_from_center': sp['distance_from_center'],
                     'bearing_from_center': sp['bearing_from_center'],
-                    'terrain_suitability': sp.get('terrain_suitability', 999.0)
+                    # 'terrain_suitability': sp.get('terrain_suitability', 999.0)
                 })
 
         if self.verbose:
@@ -553,7 +519,7 @@ class DetailedMobilityVisibilityAnalyzer:
                     'point_type': sample_poly_data['point_type'],
                     'visibility_area_ha': sample_poly_data['visibility_area_ha'],
                     'distance_from_center': sample_poly_data['distance_from_center'],
-                    'terrain_suitability': sample_poly_data.get('terrain_suitability', 999.0),
+                    # 'terrain_suitability': sample_poly_data.get('terrain_suitability', 999.0),
                     'elevation_angle': result['elevation_angle'],
                     'analysis_method': 'individual_sample_point'
                 })
@@ -748,13 +714,13 @@ class DetailedMobilityVisibilityAnalyzer:
 if __name__ == "__main__":
     # File paths - update these to your actual paths
     dsm_path = "/media/irina/My Book1/Petronas/test/petronas_test_mosaic.tif"
-    staging_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/petronas_staging_test.gpkg"
-    output_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/drone_visibility_detailed_results.gpkg"
+    staging_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/petronas_staging_test2.gpkg"
+    output_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/drone_visibility_detailed_results2.gpkg"
 
     # Analysis parameters
-    MOBILITY_BUFFER = 100.0  # 100m operator movement radius
+    MOBILITY_BUFFER = 50.0  # 100m operator movement radius
     NUM_SAMPLE_POINTS = 20  # Strategic sample points
-    NUM_RAYS = 72  # 5° increments for high accuracy
+    NUM_RAYS = 180  # 5° increments for high accuracy
     ELEVATION_ANGLE = 5.0  # 5° elevation angle
     MAX_DISTANCE = 3000  # 3km analysis radius
     SAMPLING_METHOD = 'strategic'  # 'strategic' or 'random'
