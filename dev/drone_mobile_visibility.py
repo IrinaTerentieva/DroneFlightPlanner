@@ -76,7 +76,7 @@ class DetailedMobilityVisibilityAnalyzer:
             return float(self.dsm[row, col])
         return np.nan
 
-    def _find_suitable_location(self, center_x, center_y, search_radius=3.0):
+    def _find_suitable_location(self, center_x, center_y, search_radius=10.0):
         """
         Find the lowest elevation within a radius (meters) of (center_x, center_y).
         Returns (x, y, elevation).
@@ -161,7 +161,7 @@ class DetailedMobilityVisibilityAnalyzer:
                     target_y = center_y + r * np.sin(theta)
 
                     # Find suitable location near this target
-                    suitable_location = self._find_suitable_location(target_x, target_y, search_radius=3.0)
+                    suitable_location = self._find_suitable_location(target_x, target_y, search_radius=5.0)
 
                     if suitable_location:
                         actual_x, actual_y, actual_elev = suitable_location
@@ -203,7 +203,7 @@ class DetailedMobilityVisibilityAnalyzer:
                     target_y = center_y + r * np.sin(angle)
 
                     # Find suitable terrain near this target
-                    suitable_location = self._find_suitable_location(target_x, target_y, search_radius=3.0)
+                    suitable_location = self._find_suitable_location(target_x, target_y, search_radius=5.0)
 
                     if suitable_location:
                         actual_x, actual_y, actual_elev = suitable_location
@@ -244,14 +244,6 @@ class DetailedMobilityVisibilityAnalyzer:
                         break
                 if pid >= num_points:
                     break
-
-        # # Report terrain suitability statistics
-        # if self.verbose and len(points) > 1:
-        #     suitable_points = [p for p in points if p['terrain_suitability'] < 10.0]  # Good terrain
-        #     print(f"      Terrain validation: {len(suitable_points)}/{len(points)} points in suitable locations")
-        #     avg_suitability = np.mean([p['terrain_suitability'] for p in points if p['terrain_suitability'] < 100])
-            # if len(suitable_points) > 0:
-            #     print(f"      Average terrain suitability score: {avg_suitability:.2f} (lower = flatter)")
 
         return points[:num_points]
 
@@ -549,8 +541,28 @@ class DetailedMobilityVisibilityAnalyzer:
                     'analysis_method': 'mobility_enhanced_combined'
                 })
 
+        # NEW LAYER: Save strategic points as layer "sample_points"
+        sample_points_geoms = []
+        sample_points_data = []
+        for result in results:
+            for pt in result['sample_points']:
+                sample_points_geoms.append(Point(pt['coords']))
+                sample_points_data.append({
+                    'staging_id': result['staging_id'],
+                    'point_id': pt['point_id'],
+                    'point_type': pt['point_type'],
+                    'distance_from_center': pt['distance_from_center'],
+                    'bearing_from_center': pt['bearing_from_center'],
+                    'elevation': pt['elevation'],
+                })
+        sample_points_gdf = gpd.GeoDataFrame(sample_points_data, geometry=sample_points_geoms, crs=self.crs)
+        sample_points_gdf.to_file(output_path, layer="sample_points", driver="GPKG", mode='a')
+        if self.verbose:
+            print(f"    ✅ Exported {len(sample_points_gdf)} sample points (strategic locations)")
+
         combined_visibility_gdf = gpd.GeoDataFrame(combined_visibility_data,
                                                    geometry=combined_visibility_geoms, crs=self.crs)
+        print('combined_visibility_gdf head', combined_visibility_gdf.columns)
 
         # Export only 3 essential layers to GeoPackage
         staging_gdf.to_file(output_path, layer="staging_points", driver="GPKG")
@@ -715,7 +727,7 @@ if __name__ == "__main__":
     # File paths - update these to your actual paths
     dsm_path = "/media/irina/My Book1/Petronas/test/petronas_test_mosaic.tif"
     staging_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/petronas_staging_test2.gpkg"
-    output_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/drone_visibility_detailed_results2.gpkg"
+    output_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/drone_mobile_visibility_test.gpkg"
 
     # Analysis parameters
     MOBILITY_BUFFER = 50.0  # 100m operator movement radius
