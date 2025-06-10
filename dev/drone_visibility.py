@@ -56,8 +56,8 @@ class SpatialDroneVisibilityAnalyzer:
         return data
 
     @classmethod
-    def load_staging_points_from_gpkg(cls, gpkg_path: str, layer_name: str = None) -> List[Tuple[float, float]]:
-        """Load staging points from GeoPackage"""
+    def load_staging_points_from_gpkg(cls, gpkg_path: str, layer_name: str = None) -> List[Dict]:
+        """Load staging points with cluster information from GeoPackage"""
         print(f"Loading staging points from: {gpkg_path}")
 
         try:
@@ -68,18 +68,51 @@ class SpatialDroneVisibilityAnalyzer:
 
             print(f"Loaded {len(gdf)} staging points")
             print(f"Staging points CRS: {gdf.crs}")
+            print(f"Available columns: {list(gdf.columns)}")
 
             staging_points = []
             for idx, row in gdf.iterrows():
                 geom = row.geometry
                 if geom.geom_type == 'Point':
-                    staging_points.append((geom.x, geom.y))
+                    # Extract cluster information if available
+                    cluster = row.get('cluster', None)
+                    if cluster is None:
+                        cluster = row.get('Cluster', None)  # Try capitalized version
+                    if cluster is None:
+                        cluster = row.get('CLUSTER', None)  # Try uppercase version
+
+                    staging_points.append({
+                        'coords': (geom.x, geom.y),
+                        'cluster': cluster,
+                        'original_index': idx
+                    })
                 elif geom.geom_type in ['MultiPoint', 'GeometryCollection']:
                     for point in geom.geoms:
                         if point.geom_type == 'Point':
-                            staging_points.append((point.x, point.y))
+                            cluster = row.get('cluster', None)
+                            if cluster is None:
+                                cluster = row.get('Cluster', None)
+                            if cluster is None:
+                                cluster = row.get('CLUSTER', None)
+
+                            staging_points.append({
+                                'coords': (point.x, point.y),
+                                'cluster': cluster,
+                                'original_index': idx
+                            })
 
             print(f"Extracted {len(staging_points)} point coordinates")
+
+            # Show cluster information
+            clusters = [pt['cluster'] for pt in staging_points if pt['cluster'] is not None]
+            if clusters:
+                unique_clusters = set(clusters)
+                print(f"Found clusters: {sorted(unique_clusters)}")
+                cluster_counts = pd.Series(clusters).value_counts()
+                print(f"Points per cluster: {dict(cluster_counts)}")
+            else:
+                print("Warning: No 'cluster' column found or all values are None")
+
             return staging_points
 
         except Exception as e:
@@ -222,7 +255,7 @@ class SpatialDroneVisibilityAnalyzer:
             # Fallback - create small circle around staging point
             return Point(staging_x, staging_y).buffer(50)
 
-    def analyze_staging_area_spatial(self, staging_x: float, staging_y: float,
+    def analyze_staging_area_spatial(self, staging_point: Dict,
                                      staging_id: int,
                                      elevation_angle: float = 5.0,
                                      max_distance: float = 3000.0,
@@ -231,7 +264,7 @@ class SpatialDroneVisibilityAnalyzer:
         Analyze visibility from a staging area and create spatial polygon for 5° elevation
 
         Args:
-            staging_x, staging_y: Staging area coordinates
+            staging_point: Dictionary with coords and cluster info
             staging_id: Unique ID for this staging point
             elevation_angle: Elevation angle to analyze (default 5°)
             max_distance: Maximum analysis distance
@@ -240,6 +273,9 @@ class SpatialDroneVisibilityAnalyzer:
         Returns:
             Dictionary with staging info and visibility polygon
         """
+        staging_x, staging_y = staging_point['coords']
+        cluster = staging_point['cluster']
+
         # Get staging elevation
         staging_row, staging_col = self._world_to_pixel(staging_x, staging_y)
         staging_elevation = self._get_elevation_safe(staging_row, staging_col)
@@ -247,12 +283,13 @@ class SpatialDroneVisibilityAnalyzer:
         if np.isnan(staging_elevation):
             raise ValueError(f"Invalid staging location: ({staging_x}, {staging_y})")
 
-        print(f"  Creating {elevation_angle}° visibility polygon...")
+        print(f"  Creating {elevation_angle}° visibility polygon for cluster {cluster}...")
 
         results = {
             'staging_id': staging_id,
             'staging_coords': (staging_x, staging_y),
             'staging_elevation': staging_elevation,
+            'cluster': cluster,
             'elevation_angle': elevation_angle,
             'visibility_polygon': None
         }
@@ -271,15 +308,17 @@ class SpatialDroneVisibilityAnalyzer:
 
         return results
 
-    def analyze_multiple_staging_areas_spatial(self, staging_points: List[Tuple[float, float]],
+    def analyze_multiple_staging_areas_spatial(self, staging_points: List[Dict],
                                                **kwargs) -> List[Dict]:
         """Analyze multiple staging areas and create spatial outputs with unique IDs"""
         results = []
-        for i, (x, y) in enumerate(staging_points):
+        for i, staging_point in enumerate(staging_points):
             staging_id = i + 1  # Start IDs from 1
-            print(f"\nAnalyzing staging area ID {staging_id}: ({x:.1f}, {y:.1f})")
+            x, y = staging_point['coords']
+            cluster = staging_point['cluster']
+            print(f"\nAnalyzing staging area ID {staging_id} (Cluster {cluster}): ({x:.1f}, {y:.1f})")
             try:
-                result = self.analyze_staging_area_spatial(x, y, staging_id, **kwargs)
+                result = self.analyze_staging_area_spatial(staging_point, staging_id, **kwargs)
                 results.append(result)
             except Exception as e:
                 print(f"Error analyzing staging area ID {staging_id}: {e}")
@@ -288,7 +327,7 @@ class SpatialDroneVisibilityAnalyzer:
 
     def export_visibility_to_gpkg(self, results: List[Dict], output_path: str):
         """
-        Export 5° visibility analysis results to GeoPackage with proper ID relationships
+        Export 5° visibility analysis results to GeoPackage with cluster information
 
         Args:
             results: List of analysis results
@@ -308,13 +347,14 @@ class SpatialDroneVisibilityAnalyzer:
                 'staging_x': result['staging_coords'][0],
                 'staging_y': result['staging_coords'][1],
                 'staging_elev': result['staging_elevation'],
+                'cluster': result['cluster'],
                 'elevation_angle': result['elevation_angle']
             })
 
         staging_gdf = gpd.GeoDataFrame(staging_data, geometry=staging_geoms, crs=self.crs)
 
-        # Create visibility zones layer
-        print("  Creating 5° visibility zones layer...")
+        # Create visibility zones layer with cluster information
+        print("  Creating 5° visibility zones layer with cluster attributes...")
         visibility_geoms = []
         visibility_data = []
 
@@ -323,6 +363,7 @@ class SpatialDroneVisibilityAnalyzer:
                 visibility_geoms.append(result['visibility_polygon'])
                 visibility_data.append({
                     'staging_id': result['staging_id'],  # Matching ID to staging points
+                    'cluster': result['cluster'],  # CLUSTER INFORMATION ADDED HERE
                     'staging_x': result['staging_coords'][0],
                     'staging_y': result['staging_coords'][1],
                     'staging_elev': result['staging_elevation'],
@@ -341,15 +382,20 @@ class SpatialDroneVisibilityAnalyzer:
 
             print(f"    ✅ Exported {len(staging_gdf)} staging points to layer 'staging_points'")
             print(f"    ✅ Exported {len(visibility_gdf)} visibility zones to layer 'visibility_zones_5deg'")
-            print(f"    🔗 Both layers linked by 'staging_id' field")
+            print(f"    🔗 Both layers linked by 'staging_id' and include 'cluster' attribute")
+
+            # Show cluster summary
+            cluster_summary = visibility_gdf['cluster'].value_counts()
+            print(f"    📊 Visibility zones by cluster: {dict(cluster_summary)}")
         else:
             print("    ❌ No valid visibility polygons to export")
 
         print(f"\n✅ Export complete! GeoPackage saved to: {output_path}")
         return output_path
 
-    def plot_visibility_spatial(self, results: List[Dict], show_staging_ids: List[int] = None):
-        """Create a spatial plot showing 5° visibility polygons with ID control"""
+    def plot_visibility_spatial(self, results: List[Dict], show_staging_ids: List[int] = None,
+                                color_by_cluster: bool = True):
+        """Create a spatial plot showing 5° visibility polygons with cluster-based coloring"""
         if not results:
             print("No data to plot")
             return
@@ -365,40 +411,89 @@ class SpatialDroneVisibilityAnalyzer:
 
         fig, ax = plt.subplots(1, 1, figsize=(15, 12))
 
-        # Colors for different staging points
-        colors = plt.cm.Set3(np.linspace(0, 1, len(filtered_results)))
+        if color_by_cluster:
+            # Color by cluster
+            clusters = [r['cluster'] for r in filtered_results if r['cluster'] is not None]
+            unique_clusters = sorted(list(set(clusters))) if clusters else []
 
-        # Plot visibility polygons with unique colors per staging ID
-        for i, result in enumerate(filtered_results):
-            staging_id = result['staging_id']
-            staging_x, staging_y = result['staging_coords']
-            polygon = result['visibility_polygon']
+            if unique_clusters:
+                colors = plt.cm.Set3(np.linspace(0, 1, len(unique_clusters)))
+                cluster_colors = {cluster: colors[i] for i, cluster in enumerate(unique_clusters)}
 
-            if polygon:
-                x, y = polygon.exterior.xy
-                color = colors[i]
+                # Plot visibility polygons grouped by cluster
+                for result in filtered_results:
+                    staging_id = result['staging_id']
+                    staging_x, staging_y = result['staging_coords']
+                    polygon = result['visibility_polygon']
+                    cluster = result['cluster']
 
-                # Fill polygon
-                ax.fill(x, y, alpha=0.3, color=color,
-                        label=f'Staging {staging_id} - 5° visibility')
-                # Outline
-                ax.plot(x, y, color=color, linewidth=2)
+                    if polygon and cluster in cluster_colors:
+                        x, y = polygon.exterior.xy
+                        color = cluster_colors[cluster]
 
-                # Plot staging point
-                ax.plot(staging_x, staging_y, 'o', color=color, markersize=8,
-                        markeredgecolor='black', markeredgewidth=1)
+                        # Fill polygon
+                        ax.fill(x, y, alpha=0.3, color=color,
+                                label=f'Cluster {cluster}' if staging_id == filtered_results[0]['staging_id'] or
+                                                              cluster not in [r['cluster'] for r in filtered_results[
+                                                                                                    :filtered_results.index(
+                                                                                                        result)]] else "")
+                        # Outline
+                        ax.plot(x, y, color=color, linewidth=2)
 
-                # Add staging ID label
-                ax.annotate(f'ID {staging_id}', (staging_x, staging_y),
-                            xytext=(5, 5), textcoords='offset points',
-                            fontsize=10, fontweight='bold',
-                            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+                        # Plot staging point
+                        ax.plot(staging_x, staging_y, 'o', color=color, markersize=8,
+                                markeredgecolor='black', markeredgewidth=1)
+
+                        # Add staging ID label
+                        ax.annotate(f'ID {staging_id}\nC{cluster}', (staging_x, staging_y),
+                                    xytext=(5, 5), textcoords='offset points',
+                                    fontsize=9, fontweight='bold',
+                                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+            else:
+                color_by_cluster = False
+                print("Warning: No cluster information found, using staging ID colors")
+
+        if not color_by_cluster:
+            # Color by staging ID (fallback)
+            colors = plt.cm.Set3(np.linspace(0, 1, len(filtered_results)))
+
+            for i, result in enumerate(filtered_results):
+                staging_id = result['staging_id']
+                staging_x, staging_y = result['staging_coords']
+                polygon = result['visibility_polygon']
+                cluster = result['cluster']
+
+                if polygon:
+                    x, y = polygon.exterior.xy
+                    color = colors[i]
+
+                    # Fill polygon
+                    ax.fill(x, y, alpha=0.3, color=color,
+                            label=f'Staging {staging_id} (C{cluster})')
+                    # Outline
+                    ax.plot(x, y, color=color, linewidth=2)
+
+                    # Plot staging point
+                    ax.plot(staging_x, staging_y, 'o', color=color, markersize=8,
+                            markeredgecolor='black', markeredgewidth=1)
+
+                    # Add staging ID label
+                    ax.annotate(f'ID {staging_id}', (staging_x, staging_y),
+                                xytext=(5, 5), textcoords='offset points',
+                                fontsize=10, fontweight='bold',
+                                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
 
         # Formatting
         ax.set_xlabel('Easting (m)')
         ax.set_ylabel('Northing (m)')
-        ax.set_title('Drone Visibility Analysis - 5° Elevation Zones\n'
-                     'Each color represents a different staging point')
+
+        if color_by_cluster and unique_clusters:
+            ax.set_title('Drone Visibility Analysis - 5° Elevation Zones by Cluster\n'
+                         'Each color represents a different cluster')
+        else:
+            ax.set_title('Drone Visibility Analysis - 5° Elevation Zones\n'
+                         'Each color represents a different staging point')
+
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         ax.grid(True, alpha=0.3)
         ax.set_aspect('equal')
@@ -414,11 +509,11 @@ class SpatialDroneVisibilityAnalyzer:
 # Main execution
 if __name__ == "__main__":
     # File paths - update these to your actual paths
-    dsm_path = "/media/irina/My Book1/Petronas/test/petronas_test_mosaic.tif"  # From step 1
+    dsm_path = "/media/irina/My Book1/Petronas/test/petronas_test_mosaic.tif"
     staging_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/petronas_staging_test.gpkg"
-    output_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/drone_visibility_5deg_results.gpkg"
+    output_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/drone_visibility_cluster_results.gpkg"
 
-    # Load staging points
+    # Load staging points with cluster information
     staging_points = SpatialDroneVisibilityAnalyzer.load_staging_points_from_gpkg(staging_gpkg)
 
     # Initialize analyzer
@@ -426,7 +521,7 @@ if __name__ == "__main__":
 
     # Analyze all staging areas - create ONLY 5° visibility polygons
     print(f"\nStarting spatial visibility analysis of {len(staging_points)} staging areas...")
-    print("Creating visibility polygons for 5° elevation angle ONLY")
+    print("Creating visibility polygons for 5° elevation angle with cluster information")
 
     results = analyzer.analyze_multiple_staging_areas_spatial(
         staging_points,
@@ -435,42 +530,57 @@ if __name__ == "__main__":
         num_rays=360  # 1-degree increments for smooth polygons
     )
 
-    # Export results to GeoPackage with proper ID relationships
+    # Export results to GeoPackage with cluster information
     output_file = analyzer.export_visibility_to_gpkg(results, output_gpkg)
 
-    # Show summary
+    # Show summary with cluster information
     print(f"\n{'=' * 60}")
-    print("ANALYSIS SUMMARY")
+    print("ANALYSIS SUMMARY WITH CLUSTER INFORMATION")
     print(f"{'=' * 60}")
 
     total_area = 0
+    cluster_areas = {}
+
     for result in results:
         staging_id = result['staging_id']
         coords = result['staging_coords']
+        cluster = result['cluster']
         area_ha = result['visibility_polygon'].area / 10000
         total_area += area_ha
 
-        print(f"Staging ID {staging_id:2d}: ({coords[0]:.1f}, {coords[1]:.1f}) - "
+        # Track area by cluster
+        if cluster not in cluster_areas:
+            cluster_areas[cluster] = []
+        cluster_areas[cluster].append(area_ha)
+
+        print(f"Staging ID {staging_id:2d} (Cluster {cluster}): ({coords[0]:.1f}, {coords[1]:.1f}) - "
               f"Visibility area: {area_ha:.1f} ha")
 
     print(f"\nTotal visibility area: {total_area:.1f} hectares")
     print(f"Average area per staging point: {total_area / len(results):.1f} hectares")
 
-    # Create visualization showing all staging points
-    print(f"\nCreating visualization...")
-    analyzer.plot_visibility_spatial(results)
+    # Cluster summary
+    print(f"\nCLUSTER SUMMARY:")
+    for cluster, areas in cluster_areas.items():
+        cluster_total = sum(areas)
+        cluster_avg = np.mean(areas)
+        cluster_count = len(areas)
+        print(
+            f"  Cluster {cluster}: {cluster_count} points, {cluster_total:.1f} ha total, {cluster_avg:.1f} ha average")
 
-    # Example: Show only specific staging IDs (uncomment to test)
-    # print(f"\nShowing only staging IDs 1, 3, 5...")
-    # analyzer.plot_visibility_spatial(results, show_staging_ids=[1, 3, 5])
+    # Create visualization showing all staging points colored by cluster
+    print(f"\nCreating cluster-based visualization...")
+    analyzer.plot_visibility_spatial(results, color_by_cluster=True)
 
     print(f"\n🎉 Analysis complete!")
     print(f"✅ Results exported to: {output_file}")
-    print(f"📊 Processed {len(results)} staging areas")
+    print(f"📊 Processed {len(results)} staging areas with cluster information")
     print(f"📁 GeoPackage contains:")
-    print(f"   - staging_points: Staging point locations (with staging_id)")
-    print(f"   - visibility_zones_5deg: 5° elevation visibility zones (linked by staging_id)")
+    print(f"   - staging_points: Staging point locations (with staging_id and cluster)")
+    print(f"   - visibility_zones_5deg: 5° elevation visibility zones (with cluster attribute)")
     print(f"\n💡 In QGIS, you can:")
     print(f"   1. Load both layers")
-    print(f"   2. Filter visibility zones by staging_id to show/hide specific areas")
-    print(f"   3. Join layers on staging_id for advanced analysis")
+    print(f"   2. Filter visibility zones by cluster: cluster = 'A' or cluster IN ('A', 'B')")
+    print(f"   3. Style visibility zones by cluster for easy identification")
+    print(f"   4. Calculate cluster-based statistics")
+    print(f"   5. Join layers on staging_id for advanced analysis")
