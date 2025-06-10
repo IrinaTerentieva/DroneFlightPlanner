@@ -135,7 +135,7 @@ class SpatialDroneVisibilityAnalyzer:
         return np.nan
 
     def _check_obstruction_depth(self, hit_row: int, hit_col: int,
-                                 beam_elevation: float, min_depth_pixels: int = 3) -> bool:
+                                 beam_elevation: float, min_depth_pixels: int = 2) -> bool:
         """
         Check if obstruction has sufficient depth (width) to be considered a real obstacle
 
