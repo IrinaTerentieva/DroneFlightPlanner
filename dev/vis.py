@@ -732,12 +732,12 @@ if __name__ == "__main__":
         mp.set_start_method('spawn', force=True)
 
         # Your file paths
-        dsm_path = "/media/irina/My Book/Downloads/dsm.tif"
-        staging_gpkg = "/media/irina/My Book/Downloads/staging_2955.gpkg"
+        dsm_path = "/media/irina/My Book/LittleSmoky/dsm.tif"
+        staging_gpkg = "/media/irina/My Book/LittleSmoky/staging_2955.gpkg"
 
         # Output paths
-        output_folder = "/media/irina/My Book/Downloads/visibility_individual_parallel"
-        final_output_path = "/media/irina/My Book/Downloads/staging_2955_visibility_parallel_final.gpkg"
+        output_folder = "/media/irina/My Book/LittleSmoky/visibility_individual_parallel2"
+        final_output_path = "/media/irina/My Book/LittleSmoky/staging_2955_visibility_parallel_final2.gpkg"
 
         # Analysis parameters
         MOBILITY_BUFFER = 100.0

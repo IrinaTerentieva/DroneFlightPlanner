@@ -1,3 +1,5 @@
+import os.path
+
 import numpy as np
 import rasterio
 from rasterio.transform import rowcol
@@ -6,7 +8,7 @@ from shapely.geometry import Point, Polygon
 import pandas as pd
 from typing import List, Dict, Tuple, Optional
 import warnings
-
+from rasterio.crs import CRS
 warnings.filterwarnings('ignore')
 
 
@@ -23,6 +25,8 @@ class DetailedMobilityVisibilityAnalyzer:
             self.dsm = src.read(1).astype(np.float32)
             self.transform = src.transform
             self.crs = src.crs
+            self.crs = CRS.from_epsg(3157)
+
             self.nodata = src.nodata
             self.pixel_size = abs(self.transform.a)
 
@@ -31,13 +35,13 @@ class DetailedMobilityVisibilityAnalyzer:
             print(f"DSM resolution: {self.pixel_size:.2f}m")
             print(f"DSM CRS: {self.crs}")
 
-        # Nodata filling
-        if self.nodata is not None:
-            mask = self.dsm == self.nodata
-            if np.any(mask):
-                if self.verbose:
-                    print(f"Filling {np.sum(mask)} nodata cells...")
-                self.dsm = self._fill_nodata(self.dsm, mask)
+        # # Nodata filling
+        # if self.nodata is not None:
+        #     mask = self.dsm == self.nodata
+        #     if np.any(mask):
+        #         if self.verbose:
+        #             print(f"Filling {np.sum(mask)} nodata cells...")
+        #         self.dsm = self._fill_nodata(self.dsm, mask)
 
     def _fill_nodata(self, data, mask):
         from scipy.ndimage import distance_transform_edt
@@ -725,17 +729,18 @@ class DetailedMobilityVisibilityAnalyzer:
 # Main execution
 if __name__ == "__main__":
     # File paths - update these to your actual paths
-    dsm_path = "/media/irina/My Book1/Petronas/test/petronas_test_mosaic.tif"
-    staging_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/petronas_staging_test2.gpkg"
-    output_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/drone_mobile_visibility_test.gpkg"
+    dsm_path = "file:///media/irina/My Book/Petronas/DATA/FullData/DSM_may25.tif"
+    staging_gpkg = "file:///media/irina/My Book1/Petronas/DataAcquisition_Staging_2025_v2.gpkg"
 
     # Analysis parameters
-    MOBILITY_BUFFER = 50.0  # 100m operator movement radius
-    NUM_SAMPLE_POINTS = 50  # Strategic sample points
-    NUM_RAYS = 360  # 5° increments for high accuracy
-    ELEVATION_ANGLE = 5.0  # 5° elevation angle
-    MAX_DISTANCE = 3000  # 3km analysis radius
+    MOBILITY_BUFFER = 150.0  # 100m operator movement radius
+    NUM_SAMPLE_POINTS = 100  # Strategic sample points
+    NUM_RAYS = 180  # 5° increments for high accuracy
+    ELEVATION_ANGLE = 10.0  # 5° elevation angle
+    MAX_DISTANCE = 2000  # 3km analysis radius
     SAMPLING_METHOD = 'strategic'  # 'strategic' or 'random'
+
+    output_gpkg = staging_gpkg.replace('.gpkg', f'_visibility_{ELEVATION_ANGLE}angle.gpkg')
 
     print("=" * 80)
     print("IMPROVED DETAILED MOBILITY-ENHANCED DRONE VISIBILITY ANALYZER")

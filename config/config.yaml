@@ -12,12 +12,12 @@ hydra:
 # 1) Common: Time & Location
 # ─────────────────────────────────────────────────────────────────────────────
 location:
-  latitude:     54.938643706057285   # degrees
-  longitude:   -110.35322727751391   # degrees
-  elevation:      800                # meters above sea level
+  latitude:     56.75608   # degrees
+  longitude:   -121.92940   # degrees
+  elevation:      950                # meters above sea level
   timezone:     "America/Edmonton"
-  date:        "2024-06-21"          # YYYY-MM-DD
-  freq:         "15T"                # e.g. "15T" = 15-minute intervals
+  date:        "2025-06-23"          # YYYY-MM-DD
+  freq:         "15T"                   # e.g. "15T" = 15-minute intervals
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2) Simple - Basic Time Planner
@@ -48,8 +48,8 @@ orientation_planner:
 height_and_orientation_planner:
   segmentation:
     segment_length:        100
-    vector_path:  "/media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg"
+    vector_path:  "file:///media/irina/My Book/Petronas/DATA/vector_data/AOI_lines.gpkg"
     output_field: "flight_windows"
   chm:
-    path:  "/media/irina/My Book1/LiDea_Pilot/LiDea1_nCHM10cm_2023.tif"
+    path:  "file:///media/irina/My Book/Petronas/DATA/FullData/CHM_may25.tif"
     segment_buffer_radius: 25
