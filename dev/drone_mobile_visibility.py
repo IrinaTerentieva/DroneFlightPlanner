@@ -730,13 +730,13 @@ class DetailedMobilityVisibilityAnalyzer:
 if __name__ == "__main__":
     # File paths - update these to your actual paths
     dsm_path = "file:///media/irina/My Book/Petronas/DATA/FullData/DSM_may25.tif"
-    staging_gpkg = "file:///media/irina/My Book1/Petronas/DataAcquisition_Staging_2025_v2.gpkg"
+    staging_gpkg = "file:///home/irina/Desktop/petronas_staging_day2.gpkg"
 
     # Analysis parameters
-    MOBILITY_BUFFER = 150.0  # 100m operator movement radius
+    MOBILITY_BUFFER = 100.0  # 100m operator movement radius
     NUM_SAMPLE_POINTS = 100  # Strategic sample points
     NUM_RAYS = 180  # 5° increments for high accuracy
-    ELEVATION_ANGLE = 10.0  # 5° elevation angle
+    ELEVATION_ANGLE = 5.0  # 5° elevation angle
     MAX_DISTANCE = 2000  # 3km analysis radius
     SAMPLING_METHOD = 'strategic'  # 'strategic' or 'random'
 

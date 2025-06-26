@@ -25,6 +25,7 @@ class ParallelWindowedMobilityVisibilityAnalyzer:
         Initialize parallel analyzer that loads DSM data on-demand in windows
 
         Args:
+            drone_height_agl: Drone height above ground level (default 120m)
             max_analysis_distance: Maximum ray casting distance (meters)
             buffer_extra: Extra buffer around analysis area for edge effects (meters)
             n_cores: Number of CPU cores to use for parallel processing
@@ -38,6 +39,7 @@ class ParallelWindowedMobilityVisibilityAnalyzer:
 
         if self.verbose:
             print(f"🔍 Initializing parallel windowed DSM reader: {dsm_path}")
+            print(f"🚁 Drone height AGL: {drone_height_agl}m")
             print(f"🚀 Using {n_cores} CPU cores for parallel processing")
 
         # Get DSM metadata without loading the entire raster
@@ -117,8 +119,13 @@ class ParallelWindowedMobilityVisibilityAnalyzer:
             'dsm_shape': self.dsm_shape,
             'dsm_bounds': self.dsm_bounds,
             'max_analysis_distance': self.max_analysis_distance,
-            'buffer_extra': self.buffer_extra
+            'buffer_extra': self.buffer_extra,
+            'drone_height_agl': self.drone_height_agl
         }
+
+        # Add drone_height_agl to kwargs if not present
+        if 'drone_height_agl' not in kwargs:
+            kwargs['drone_height_agl'] = self.drone_height_agl
 
         # Create argument tuples for each staging point
         process_args = [
@@ -144,7 +151,7 @@ class ParallelWindowedMobilityVisibilityAnalyzer:
                         staging_id = result['staging_id']
                         print(f"✅ Completed staging {staging_id} ({i + 1}/{len(process_args)}) - "
                               f"Area: {result['total_area']:.1f} ha, "
-                              f"Improvement: +{result['improvement_pct']:.1f}%")
+                              f"Drone visibility: {result['drone_visibility_area']:.1f} ha")
                     else:
                         print(f"❌ Failed staging point {i + 1}/{len(process_args)}")
             else:
@@ -210,6 +217,7 @@ class ParallelWindowedMobilityVisibilityAnalyzer:
         all_individual_zones = []
         all_combined_zones = []
         all_sample_points = []
+        all_drone_zones = []
 
         for file_path in individual_files:
             try:
@@ -218,6 +226,13 @@ class ParallelWindowedMobilityVisibilityAnalyzer:
                 individual_gdf = gpd.read_file(file_path, layer="individual_visibility_zones")
                 combined_gdf = gpd.read_file(file_path, layer="combined_visibility_zones")
                 sample_gdf = gpd.read_file(file_path, layer="sample_points")
+
+                # Try to read drone visibility layer if it exists
+                try:
+                    drone_gdf = gpd.read_file(file_path, layer="drone_visibility_zones")
+                    all_drone_zones.append(drone_gdf)
+                except:
+                    pass
 
                 all_staging_points.append(staging_gdf)
                 all_individual_zones.append(individual_gdf)
@@ -245,6 +260,12 @@ class ParallelWindowedMobilityVisibilityAnalyzer:
         final_combined_gdf.to_file(final_output_path, layer="combined_visibility_zones", driver="GPKG", mode='a')
         final_sample_gdf.to_file(final_output_path, layer="sample_points", driver="GPKG", mode='a')
 
+        # Add drone visibility layer if available
+        if all_drone_zones:
+            final_drone_gdf = gpd.pd.concat(all_drone_zones, ignore_index=True)
+            final_drone_gdf.to_file(final_output_path, layer="drone_visibility_zones", driver="GPKG", mode='a')
+            print(f"    📊 Total drone visibility zones: {len(final_drone_gdf)}")
+
         if self.verbose:
             print(f"    🎉 Final combined file saved: {final_output_path}")
             print(f"    📊 Total staging points: {len(final_staging_gdf)}")
@@ -271,6 +292,7 @@ class SingleStagingAnalyzer:
         self.dsm_bounds = dsm_metadata['dsm_bounds']
         self.max_analysis_distance = dsm_metadata['max_analysis_distance']
         self.buffer_extra = dsm_metadata['buffer_extra']
+        self.drone_height_agl = dsm_metadata.get('drone_height_agl', 120.0)
 
     def _get_analysis_window(self, center_x, center_y, mobility_buffer):
         """Calculate the minimum window needed for analysis around a staging point"""
@@ -398,9 +420,93 @@ class SingleStagingAnalyzer:
 
         return points[:num_points]
 
+    def _find_drone_visibility_distance(self, start_x, start_y, start_elev, bearing_deg,
+                                        dsm_window, window_transform, drone_height_agl=120.0,
+                                        max_distance=2000, observer_height=1.7, step_back=200):
+        """
+        Find the maximum distance where a drone is visible along a bearing.
+
+        Args:
+            drone_height_agl: Height of drone above ground level (meters)
+            step_back: Distance to step back when drone is not visible (meters)
+        """
+        bearing_rad = np.radians(bearing_deg)
+        step = self.pixel_size * 1.5
+
+        # Observer eye level
+        observer_eye_level = start_elev + observer_height
+
+        # Start from max distance and work backwards if needed
+        current_distance = max_distance
+        drone_visible = False
+        final_distance = 0
+
+        while current_distance > 0:
+            # Drone position
+            drone_x = start_x + current_distance * np.sin(bearing_rad)
+            drone_y = start_y + current_distance * np.cos(bearing_rad)
+
+            # Get terrain elevation at drone position
+            drone_row, drone_col = self._world_to_pixel_windowed(drone_x, drone_y, window_transform)
+            drone_terrain_elev = self._get_elevation_safe_windowed(drone_row, drone_col, dsm_window)
+
+            if np.isnan(drone_terrain_elev):
+                # If outside window, step back
+                current_distance -= step_back
+                continue
+
+            # Drone elevation (terrain + AGL height)
+            drone_elev = drone_terrain_elev + drone_height_agl
+
+            # Calculate angle from observer to drone
+            horizontal_dist = current_distance
+            vertical_dist = drone_elev - observer_eye_level
+            angle_to_drone = np.degrees(np.arctan2(vertical_dist, horizontal_dist))
+
+            # Check line of sight from observer to drone
+            num_steps = int(current_distance / step)
+            line_blocked = False
+
+            for i in range(1, num_steps):
+                d = i * step
+                x = start_x + d * np.sin(bearing_rad)
+                y = start_y + d * np.cos(bearing_rad)
+
+                # Line of sight elevation at this distance
+                los_elev = observer_eye_level + d * np.tan(np.radians(angle_to_drone))
+
+                # Terrain elevation
+                row, col = self._world_to_pixel_windowed(x, y, window_transform)
+                terrain_elev = self._get_elevation_safe_windowed(row, col, dsm_window)
+
+                if np.isnan(terrain_elev):
+                    line_blocked = True
+                    break
+
+                # Check if terrain blocks line of sight
+                if terrain_elev > los_elev:
+                    line_blocked = True
+                    break
+
+            if not line_blocked:
+                # Drone is visible at this distance
+                drone_visible = True
+                final_distance = current_distance
+                break
+            else:
+                # Drone not visible, step back and try again
+                current_distance -= step_back
+
+        return {
+            'visible': drone_visible,
+            'distance': final_distance,
+            'drone_coords': (drone_x, drone_y) if drone_visible else None,
+            'angle_to_drone': angle_to_drone if drone_visible else None
+        }
+
     def _cast_visibility_ray(self, start_x, start_y, start_elev, bearing_deg, elev_angle_deg,
                              dsm_window, window_transform, max_distance=3000, observer_height=1.7):
-        """Cast UPWARD visibility ray for line-of-sight analysis"""
+        """Cast UPWARD visibility ray for line-of-sight analysis (original method for comparison)"""
         bearing_rad = np.radians(bearing_deg)
         elev_rad = np.radians(elev_angle_deg)
         step = self.pixel_size * 1.5
@@ -415,7 +521,7 @@ class SingleStagingAnalyzer:
             y = start_y + d * np.cos(bearing_rad)
 
             # UPWARD beam at specified elevation angle
-            beam_elev = observer_eye_level + d * np.tan(elev_rad)  # ← CORRECTED: goes UP
+            beam_elev = observer_eye_level + d * np.tan(elev_rad)
 
             row, col = self._world_to_pixel_windowed(x, y, window_transform)
             terrain_elev = self._get_elevation_safe_windowed(row, col, dsm_window)
@@ -432,7 +538,7 @@ class SingleStagingAnalyzer:
                 }
 
             # Check if terrain blocks the UPWARD beam
-            if terrain_elev > beam_elev:  # ← CORRECTED: terrain blocks upward sight line
+            if terrain_elev > beam_elev:
                 return {
                     'hit': True,
                     'hit_distance': d,
@@ -462,6 +568,7 @@ class SingleStagingAnalyzer:
         elev_angle = analysis_params['elev_angle']
         max_distance = analysis_params['max_distance']
         sampling = analysis_params['sampling']
+        drone_height_agl = analysis_params.get('drone_height_agl', 120.0)
 
         # Calculate and load the required DSM window
         window = self._get_analysis_window(staging_x, staging_y, buffer)
@@ -480,12 +587,14 @@ class SingleStagingAnalyzer:
 
         all_ray_data = []
         max_dist_by_bearing = {}
+        drone_visibility_by_bearing = {}
         individual_sample_polygons = []
 
         # Cast rays for each bearing and sample point
         for b_idx, bearing in enumerate(bearings):
             ray_id = b_idx + 1
             best = {'distance': 0, 'point_id': None, 'ray_data': None}
+            best_drone = {'distance': 0, 'point_id': None, 'drone_data': None}
 
             for sp in sample_points:
                 pid = sp['point_id']
@@ -495,8 +604,15 @@ class SingleStagingAnalyzer:
                 if np.isnan(selev):
                     continue
 
+                # Original visibility ray (for comparison)
                 ray = self._cast_visibility_ray(sx, sy, selev, bearing, elev_angle, dsm_window, window_transform,
                                                 max_distance)
+
+                # Find drone visibility distance
+                drone_result = self._find_drone_visibility_distance(sx, sy, selev, bearing, dsm_window,
+                                                                    window_transform, drone_height_agl,
+                                                                    max_distance)
+
                 ray_data = {
                     'staging_id': staging_id,
                     'point_id': pid,
@@ -508,6 +624,9 @@ class SingleStagingAnalyzer:
                     'point_type': sp['point_type'],
                     'distance_from_staging_center': sp['distance_from_center'],
                     'visibility_distance': ray['hit_distance'],
+                    'drone_visibility_distance': drone_result['distance'],
+                    'drone_visible': drone_result['visible'],
+                    'angle_to_drone': drone_result['angle_to_drone'],
                     'hit_terrain': ray['hit'],
                     'hit_coords': ray['hit_coords'],
                     'hit_elevation': ray['hit_elevation'],
@@ -519,9 +638,13 @@ class SingleStagingAnalyzer:
                 if ray['hit_distance'] > best['distance']:
                     best = {'distance': ray['hit_distance'], 'point_id': pid, 'ray_data': ray_data}
 
-            max_dist_by_bearing[bearing] = best
+                if drone_result['distance'] > best_drone['distance']:
+                    best_drone = {'distance': drone_result['distance'], 'point_id': pid, 'drone_data': drone_result}
 
-        # Build visibility polygons
+            max_dist_by_bearing[bearing] = best
+            drone_visibility_by_bearing[bearing] = best_drone
+
+        # Build visibility polygons (original method)
         visibility_points = []
         for bearing in bearings:
             dist = max_dist_by_bearing[bearing]['distance']
@@ -534,6 +657,24 @@ class SingleStagingAnalyzer:
 
         visibility_polygon = Polygon(visibility_points) if len(visibility_points) >= 3 else Point(staging_x,
                                                                                                   staging_y).buffer(50)
+
+        # Build drone visibility polygon
+        drone_visibility_points = []
+        for bearing in bearings:
+            dist = drone_visibility_by_bearing[bearing]['distance']
+            if dist > 0:
+                x = staging_x + dist * np.sin(np.radians(bearing))
+                y = staging_y + dist * np.cos(np.radians(bearing))
+                drone_visibility_points.append((x, y))
+            else:
+                # If drone not visible in this direction, use staging point
+                drone_visibility_points.append((staging_x, staging_y))
+
+        if drone_visibility_points and drone_visibility_points[0] != drone_visibility_points[-1]:
+            drone_visibility_points.append(drone_visibility_points[0])
+
+        drone_visibility_polygon = Polygon(drone_visibility_points) if len(drone_visibility_points) >= 3 else Point(
+            staging_x, staging_y).buffer(10)
 
         # Center-only polygon for comparison
         center_rays = [r for r in all_ray_data if r['point_id'] == 0]
@@ -553,14 +694,20 @@ class SingleStagingAnalyzer:
         # Calculate metrics
         total_area = visibility_polygon.area / 10000  # hectares
         center_area = center_polygon.area / 10000
+        drone_visibility_area = drone_visibility_polygon.area / 10000
         improvement = ((total_area - center_area) / center_area * 100) if center_area > 0 else 0
 
         # Point usage stats
         point_usage = {}
+        drone_point_usage = {}
         for b in bearings:
             pid = max_dist_by_bearing[b]['point_id']
             if pid is not None:
                 point_usage[pid] = point_usage.get(pid, 0) + 1
+
+            drone_pid = drone_visibility_by_bearing[b]['point_id']
+            if drone_pid is not None:
+                drone_point_usage[drone_pid] = drone_point_usage.get(drone_pid, 0) + 1
 
         # Individual sample polygons
         for sp in sample_points:
@@ -572,20 +719,39 @@ class SingleStagingAnalyzer:
                 continue
 
             poly_pts = []
+            drone_poly_pts = []
             for b in bearings:
                 rays = [r for r in all_ray_data if r['point_id'] == pid and r['bearing_deg'] == b]
                 if rays:
                     dist = rays[0]['visibility_distance']
+                    drone_dist = rays[0]['drone_visibility_distance']
+
+                    # Original visibility
                     x = sx + dist * np.sin(np.radians(b))
                     y = sy + dist * np.cos(np.radians(b))
                     poly_pts.append((x, y))
 
+                    # Drone visibility
+                    if drone_dist > 0:
+                        dx = sx + drone_dist * np.sin(np.radians(b))
+                        dy = sy + drone_dist * np.cos(np.radians(b))
+                        drone_poly_pts.append((dx, dy))
+                    else:
+                        drone_poly_pts.append((sx, sy))
+
             if poly_pts and poly_pts[0] != poly_pts[-1]:
                 poly_pts.append(poly_pts[0])
+
+            if drone_poly_pts and drone_poly_pts[0] != drone_poly_pts[-1]:
+                drone_poly_pts.append(drone_poly_pts[0])
 
             if len(poly_pts) >= 3:
                 sample_poly = Polygon(poly_pts)
                 sample_area = sample_poly.area / 10000
+
+                drone_sample_poly = Polygon(drone_poly_pts) if len(drone_poly_pts) >= 3 else Point(sx, sy).buffer(10)
+                drone_sample_area = drone_sample_poly.area / 10000
+
                 individual_sample_polygons.append({
                     'staging_id': staging_id,
                     'point_id': pid,
@@ -595,6 +761,8 @@ class SingleStagingAnalyzer:
                     'point_type': sp['point_type'],
                     'visibility_polygon': sample_poly,
                     'visibility_area_ha': sample_area,
+                    'drone_visibility_polygon': drone_sample_poly,
+                    'drone_visibility_area_ha': drone_sample_area,
                     'distance_from_center': sp['distance_from_center'],
                     'bearing_from_center': sp['bearing_from_center'],
                 })
@@ -608,18 +776,23 @@ class SingleStagingAnalyzer:
             'staging_elevation': staging_elev,
             'mobility_buffer': buffer,
             'elevation_angle': elev_angle,
+            'drone_height_agl': drone_height_agl,
             'num_sample_points': len(sample_points),
             'num_rays': num_rays,
             'total_ray_calculations': len(all_ray_data),
             'visibility_polygon': visibility_polygon,
+            'drone_visibility_polygon': drone_visibility_polygon,
             'center_area': center_area,
             'total_area': total_area,
+            'drone_visibility_area': drone_visibility_area,
             'improvement_pct': improvement,
             'sample_points': sample_points,
             'individual_sample_polygons': individual_sample_polygons,
             'all_ray_data': all_ray_data,
             'max_distances_by_bearing': max_dist_by_bearing,
+            'drone_visibility_by_bearing': drone_visibility_by_bearing,
             'point_usage_stats': point_usage,
+            'drone_point_usage_stats': drone_point_usage,
             'sampling_method': sampling
         }
 
@@ -637,10 +810,12 @@ class SingleStagingAnalyzer:
             'staging_elev': result['staging_elevation'],
             'mobility_buffer': result['mobility_buffer'],
             'elevation_angle': result['elevation_angle'],
+            'drone_height_agl': result['drone_height_agl'],
             'num_sample_points': result['num_sample_points'],
             'num_rays': result['num_rays'],
             'sampling_method': result['sampling_method'],
             'visibility_area_ha': result['total_area'],
+            'drone_visibility_area_ha': result['drone_visibility_area'],
             'area_improvement_pct': result['improvement_pct']
         }]
 
@@ -651,7 +826,7 @@ class SingleStagingAnalyzer:
         )
         staging_gdf.to_file(output_path, layer="staging_points", driver="GPKG")
 
-        # Combined visibility polygon
+        # Combined visibility polygon (original method)
         combined_data = [{
             'staging_id': result['staging_id'],
             'staging_point_id': result['staging_id'],
@@ -674,6 +849,26 @@ class SingleStagingAnalyzer:
         )
         combined_gdf.to_file(output_path, layer="combined_visibility_zones", driver="GPKG", mode='a')
 
+        # Drone visibility polygon
+        drone_data = [{
+            'staging_id': result['staging_id'],
+            'staging_point_id': result['staging_id'],
+            'staging_x': result['staging_coords'][0],
+            'staging_y': result['staging_coords'][1],
+            'drone_height_agl': result['drone_height_agl'],
+            'drone_visibility_area_ha': result['drone_visibility_area'],
+            'num_sample_points': result['num_sample_points'],
+            'sampling_method': result['sampling_method'],
+            'analysis_method': 'drone_visibility'
+        }]
+
+        drone_gdf = gpd.GeoDataFrame(
+            drone_data,
+            geometry=[result["drone_visibility_polygon"]],
+            crs=self.crs
+        )
+        drone_gdf.to_file(output_path, layer="drone_visibility_zones", driver="GPKG", mode='a')
+
         # Individual polygons
         if result["individual_sample_polygons"]:
             individual_data = []
@@ -688,6 +883,7 @@ class SingleStagingAnalyzer:
                     'sample_y': sample_poly_data['sample_coords'][1],
                     'point_type': sample_poly_data['point_type'],
                     'visibility_area_ha': sample_poly_data['visibility_area_ha'],
+                    'drone_visibility_area_ha': sample_poly_data['drone_visibility_area_ha'],
                     'distance_from_center': sample_poly_data['distance_from_center'],
                     'elevation_angle': result['elevation_angle'],
                     'analysis_method': 'individual_sample_point'
@@ -733,11 +929,11 @@ if __name__ == "__main__":
 
         # Your file paths
         dsm_path = "file:///media/irina/My Book/Petronas/DATA/FullData/DSM_may25.tif"
-        staging_gpkg = "file:///home/irina/Desktop/petronas_staging_day2.gpkg"
+        staging_gpkg = "/home/irina/staging_new.gpkg"
 
         # Output paths
-        output_folder = "/media/irina/My Book/Petronas/DATA/visibility_petronas_day2"
-        final_output_path = "/media/irina/My Book/Petronas/DATA/staging_petronas_day2.gpkg"
+        output_folder = "/media/irina/My Book/LittleSmoky/real_visibility_petronas"
+        final_output_path = "/media/irina/My Book/LittleSmoky/real_staging_petronas.gpkg"
 
         # Analysis parameters
         MOBILITY_BUFFER = 150.0
@@ -745,14 +941,16 @@ if __name__ == "__main__":
         NUM_RAYS = 180  # 2° increments
         ELEVATION_ANGLE = 5.0
         MAX_DISTANCE = 2000
+        DRONE_HEIGHT_AGL = 120.0  # Drone height above ground level
         SAMPLING_METHOD = 'strategic'
-        N_CORES = 16  # Use 8 CPU cores
+        N_CORES = 16  # Use 16 CPU cores
 
         print("=" * 80)
-        print("🚀 PARALLEL WINDOWED VISIBILITY ANALYZER (8-CORE)")
+        print("🚀 PARALLEL WINDOWED VISIBILITY ANALYZER WITH DRONE DETECTION")
         print("=" * 80)
         print("Features:")
         print(f"- 🚀 Parallel processing: {N_CORES} CPU cores")
+        print(f"- 🚁 Drone visibility analysis: {DRONE_HEIGHT_AGL}m AGL")
         print(f"- 💾 Loads DSM data on-demand in small windows per core")
         print(f"- 🎯 Analysis radius: {MAX_DISTANCE}m per staging point")
         print(f"- 📊 Sample points: {NUM_SAMPLE_POINTS} in {MOBILITY_BUFFER}m buffer")
@@ -764,7 +962,7 @@ if __name__ == "__main__":
         # Initialize parallel analyzer
         analyzer = ParallelWindowedMobilityVisibilityAnalyzer(
             dsm_path,
-            drone_height_agl=120.0,
+            drone_height_agl=DRONE_HEIGHT_AGL,
             verbose=True,
             max_analysis_distance=MAX_DISTANCE,
             buffer_extra=200,
@@ -786,6 +984,7 @@ if __name__ == "__main__":
             num_rays=NUM_RAYS,
             elev_angle=ELEVATION_ANGLE,
             max_distance=MAX_DISTANCE,
+            drone_height_agl=DRONE_HEIGHT_AGL,
             sampling=SAMPLING_METHOD
         )
 
@@ -805,12 +1004,15 @@ if __name__ == "__main__":
 
             # Show summary statistics
             total_area = sum(r['total_area'] for r in results)
+            total_drone_area = sum(r['drone_visibility_area'] for r in results)
             avg_improvement = sum(r['improvement_pct'] for r in results) / len(results)
             total_calculations = sum(r['total_ray_calculations'] for r in results)
 
             print(f"\n📊 SUMMARY STATISTICS:")
-            print(f"   Total visibility area: {total_area:.1f} hectares")
+            print(f"   Total visibility area (original): {total_area:.1f} hectares")
+            print(f"   Total drone visibility area: {total_drone_area:.1f} hectares")
             print(f"   Average area per staging: {total_area / len(results):.1f} hectares")
+            print(f"   Average drone visibility per staging: {total_drone_area / len(results):.1f} hectares")
             print(f"   Average improvement: +{avg_improvement:.1f}%")
             print(f"   Total ray calculations: {total_calculations:,}")
             print(f"   Processing rate: {total_calculations / total_time:.0f} rays/second")

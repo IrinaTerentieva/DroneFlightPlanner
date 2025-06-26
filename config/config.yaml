@@ -38,7 +38,7 @@ simple_time_planner:
 #    (src/orientation_planner.py)
 # ─────────────────────────────────────────────────────────────────────────────
 orientation_planner:
-  vector_path:  "/media/irina/My Book1/LiDea_Pilot/FLM/all_group_copy_ID.gpkg"
+  vector_path:  "file:///media/irina/My Book/Petronas/DATA/vector_data/lines_for_shadows.gpkg"
   output_field: "flight_windows"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ orientation_planner:
 height_and_orientation_planner:
   segmentation:
     segment_length:        100
-    vector_path:  "file:///media/irina/My Book/Petronas/DATA/vector_data/AOI_lines.gpkg"
+    vector_path:  "file:///media/irina/My Book/Petronas/DATA/vector_data/lines_for_shadows.gpkg"
     output_field: "flight_windows"
   chm:
     path:  "file:///media/irina/My Book/Petronas/DATA/FullData/CHM_may25.tif"
