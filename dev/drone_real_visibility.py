@@ -1,7 +1,7 @@
 import os.path
 import numpy as np
 import rasterio
-from rasterio.transform import rowcol
+from rasterio.transform import rowcol, xy
 from rasterio.windows import Window
 import geopandas as gpd
 from shapely.geometry import Point, Polygon
@@ -9,11 +9,11 @@ import pandas as pd
 from typing import List, Dict, Tuple, Optional
 import warnings
 from rasterio.crs import CRS
-from rasterio.transform import xy
 import multiprocessing as mp
 from functools import partial
 import time
 import sys
+from scipy.ndimage import minimum_filter
 
 warnings.filterwarnings('ignore')
 
@@ -360,9 +360,66 @@ class SingleStagingAnalyzer:
             return float(dsm_window[row, col])
         return np.nan
 
+    def _find_local_minima(self, dsm_window, window_transform, center_x, center_y, buffer_radius,
+                           minima_radius=3.0):
+        """Find local minima in DSM within buffer area"""
+        from scipy import ndimage
+        from scipy.ndimage import minimum_filter
+
+        # Calculate buffer bounds in pixel coordinates
+        center_row, center_col = self._world_to_pixel_windowed(center_x, center_y, window_transform)
+        buffer_pixels = int(buffer_radius / self.pixel_size)
+
+        # Define search area within buffer
+        min_row = max(0, center_row - buffer_pixels)
+        max_row = min(dsm_window.shape[0], center_row + buffer_pixels + 1)
+        min_col = max(0, center_col - buffer_pixels)
+        max_col = min(dsm_window.shape[1], center_col + buffer_pixels + 1)
+
+        # Extract buffer area
+        buffer_dsm = dsm_window[min_row:max_row, min_col:max_col]
+
+        # Calculate minimum filter size based on minima radius
+        filter_size = int(2 * minima_radius / self.pixel_size) + 1
+        if filter_size < 3:
+            filter_size = 3
+
+        # Apply minimum filter to find local minima
+        local_min = minimum_filter(buffer_dsm, size=filter_size, mode='constant', cval=np.inf)
+
+        # Find where original values equal local minimum (these are local minima)
+        is_minima = (buffer_dsm == local_min) & (buffer_dsm < np.inf)
+
+        # Get coordinates of local minima
+        minima_rows, minima_cols = np.where(is_minima)
+
+        # Convert back to full window coordinates and then to world coordinates
+        minima_points = []
+        for i in range(len(minima_rows)):
+            row = minima_rows[i] + min_row
+            col = minima_cols[i] + min_col
+
+            # Convert to world coordinates
+            x, y = xy(window_transform, row, col)
+
+            # Check if within circular buffer
+            dist = np.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+            if dist <= buffer_radius and dist > 0:  # Exclude center point
+                elev = float(buffer_dsm[minima_rows[i], minima_cols[i]])
+                bearing = (90 - np.degrees(np.arctan2(y - center_y, x - center_x))) % 360
+
+                minima_points.append({
+                    'coords': (x, y),
+                    'elevation': elev,
+                    'distance_from_center': dist,
+                    'bearing_from_center': bearing
+                })
+
+        return minima_points
+
     def _generate_sample_points(self, center_x, center_y, buffer_radius, dsm_window, window_transform,
                                 num_points=20, sampling='strategic'):
-        """Generate sample points using windowed DSM data"""
+        """Generate sample points at local minima within buffer"""
         points = []
 
         # Center point
@@ -380,43 +437,55 @@ class SingleStagingAnalyzer:
         if num_points == 1:
             return points
 
-        # Generate additional points using strategic pattern
-        if sampling == 'strategic':
-            num_rings = 5
-            points_per_ring = (num_points - 1) // num_rings
-            pid = 1
+        # Find local minima within buffer
+        minima_points = self._find_local_minima(dsm_window, window_transform, center_x, center_y,
+                                                buffer_radius, minima_radius=3.0)
 
-            for ring in range(1, num_rings + 1):
-                ring_radius = buffer_radius * ring / num_rings
-                points_in_ring = points_per_ring + (
-                    1 if (ring == num_rings and (num_points - 1) % num_rings > 0) else 0)
+        if not minima_points:
+            print(f"Warning: No local minima found within buffer, using center point only")
+            return points[:1]
 
-                for i in range(points_in_ring):
-                    base_angle = 2 * np.pi * i / points_in_ring
-                    angle = base_angle + np.random.uniform(-0.2, 0.2)
-                    r = ring_radius + np.random.uniform(-0.1 * ring_radius, 0.1 * ring_radius)
+        # Sort by elevation (lowest first) to prioritize deeper minima
+        minima_points.sort(key=lambda p: p['elevation'])
 
-                    target_x = center_x + r * np.cos(angle)
-                    target_y = center_y + r * np.sin(angle)
+        # Select up to num_points-1 minima (excluding center)
+        selected_minima = minima_points[:num_points - 1]
 
-                    test_row, test_col = self._world_to_pixel_windowed(target_x, target_y, window_transform)
-                    test_elev = self._get_elevation_safe_windowed(test_row, test_col, dsm_window)
-                    bearing = (90 - np.degrees(angle)) % 360
+        # Add selected minima as sample points
+        pid = 1
+        for minima in selected_minima:
+            points.append({
+                'point_id': pid,
+                'coords': minima['coords'],
+                'distance_from_center': minima['distance_from_center'],
+                'bearing_from_center': minima['bearing_from_center'],
+                'point_type': 'local_minimum',
+                'elevation': minima['elevation'],
+            })
+            pid += 1
 
+        # If we have fewer minima than requested points, add some distributed points
+        if len(points) < num_points:
+            remaining = num_points - len(points)
+            # Sort remaining minima by distance to get spatial distribution
+            remaining_minima = minima_points[len(selected_minima):]
+            if remaining_minima:
+                # Select evenly distributed by bearing
+                remaining_minima.sort(key=lambda p: p['bearing_from_center'])
+                step = max(1, len(remaining_minima) // remaining)
+                for i in range(0, min(len(remaining_minima), remaining * step), step):
+                    if len(points) >= num_points:
+                        break
+                    minima = remaining_minima[i]
                     points.append({
                         'point_id': pid,
-                        'coords': (target_x, target_y),
-                        'distance_from_center': r,
-                        'bearing_from_center': bearing,
-                        'point_type': f'ring_{ring}',
-                        'elevation': test_elev if not np.isnan(test_elev) else 1000.0,
+                        'coords': minima['coords'],
+                        'distance_from_center': minima['distance_from_center'],
+                        'bearing_from_center': minima['bearing_from_center'],
+                        'point_type': 'local_minimum',
+                        'elevation': minima['elevation'],
                     })
-
                     pid += 1
-                    if pid >= num_points:
-                        break
-                if pid >= num_points:
-                    break
 
         return points[:num_points]
 
@@ -929,11 +998,11 @@ if __name__ == "__main__":
 
         # Your file paths
         dsm_path = "file:///media/irina/My Book/Petronas/DATA/FullData/DSM_may25.tif"
-        staging_gpkg = "/home/irina/staging_new.gpkg"
+        staging_gpkg = "file:///home/irina/Desktop/petronas_staging_day2.gpkg"
 
         # Output paths
-        output_folder = "/media/irina/My Book/LittleSmoky/real_visibility_petronas"
-        final_output_path = "/media/irina/My Book/LittleSmoky/real_staging_petronas.gpkg"
+        output_folder = "/media/irina/My Book/Petronas/DATA/visibility_petronas_day2min"
+        final_output_path = "/media/irina/My Book/Petronas/DATA/petronas_staging_day2min.gpkg"
 
         # Analysis parameters
         MOBILITY_BUFFER = 150.0

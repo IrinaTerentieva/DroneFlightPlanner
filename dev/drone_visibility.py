@@ -36,12 +36,12 @@ class SpatialDroneVisibilityAnalyzer:
             print(f"DSM resolution: {self.pixel_size:.2f}m")
             print(f"DSM CRS: {self.crs}")
 
-        # Replace nodata with interpolated values
-        if self.nodata is not None:
-            mask = self.dsm == self.nodata
-            if np.any(mask):
-                print(f"Filling {np.sum(mask)} nodata cells...")
-                self.dsm = self._fill_nodata(self.dsm, mask)
+        # # Replace nodata with interpolated values
+        # if self.nodata is not None:
+        #     mask = self.dsm == self.nodata
+        #     if np.any(mask):
+        #         print(f"Filling {np.sum(mask)} nodata cells...")
+        #         self.dsm = self._fill_nodata(self.dsm, mask)
 
     def _fill_nodata(self, data: np.ndarray, mask: np.ndarray) -> np.ndarray:
         """Simple nodata filling using nearest valid neighbors"""
@@ -509,9 +509,9 @@ class SpatialDroneVisibilityAnalyzer:
 # Main execution
 if __name__ == "__main__":
     # File paths - update these to your actual paths
-    dsm_path = "/media/irina/My Book1/Petronas/test/petronas_test_mosaic.tif"
-    staging_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/petronas_staging_test.gpkg"
-    output_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/drone_visibility_cluster_results.gpkg"
+    dsm_path = "file:///media/irina/My Book/Petronas/DATA/FullData/DSM_may25.tif"
+    staging_gpkg = "file:///home/irina/Desktop/petronas_staging_day2.gpkg"
+    output_gpkg = "/media/irina/My Book/Petronas/DATA/tmp/petronas_staging_day2.gpkg"
 
     # Load staging points with cluster information
     staging_points = SpatialDroneVisibilityAnalyzer.load_staging_points_from_gpkg(staging_gpkg)
